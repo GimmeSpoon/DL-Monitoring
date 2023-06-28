@@ -1,0 +1,5 @@
+node_modules/
+old/
+*.json
+*.txt
+*.ico

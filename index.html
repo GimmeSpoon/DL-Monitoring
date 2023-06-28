@@ -1,0 +1,248 @@
+<html lang="en">
+  <head>
+    <title>MLLAB Server Monitoring</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width">
+    <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.3.js" integrity="sha256-nQLuAZGRRcILA+6dMBOvcRh5Pe310sBpanc6+QBmyVM=" crossorigin="anonymous"></script>
+    <script src="https://kit.fontawesome.com/108e1caa2e.js" crossorigin="anonymous"></script>
+    <script type="text/javascript">
+      const addr = window.location.href + 'monitor';
+      var monitor = false;
+      var interval = null;
+      var state = {};
+
+      const isUserColorTheme = localStorage.getItem('color-theme');
+      const isOsColorTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      const getUserTheme = () => (isUserColorTheme ? isUserColorTheme : isOsColorTheme);
+      const userHTML = (users) => {
+        let userHTML = "";
+        for(const user of users){
+          userHTML += `<div class="d-user"><i class="fa-solid fa-user"></i> ${user}</div>`
+        }
+        return userHTML;
+      }
+      const newElement = (dev_state) => {
+        let gpuHTML = "";
+        for(const gpuinfo of dev_state['gpus']){
+          gpuHTML += `<div class="gpu-box" id="gpu${dev_state['name']}_${gpuinfo['gpu_id']}">
+            <div class="gpu-head">
+              <div class="timestamp" id="time${dev_state['name']}_${gpuinfo['gpu_id']}">${gpuinfo['timestamp'].slice(0,-4)}</div>
+              <div class="gpuname" id="name${dev_state['name']}_${gpuinfo['gpu_id']}">${gpuinfo['gpu_name']}</div>
+            </div>
+            <div class="fan-container gauge">
+              <div class="fan" id="fan${dev_state['name']}_${gpuinfo['gpu_id']}"><i class="fa-solid fa-fan"></i></div>
+              <span id="fan-info${dev_state['name']}_${gpuinfo['gpu_id']}">${gpuinfo['fan_speed']}%</span>
+            </div>
+            <div class="d-util">
+              <section>
+                <svg class="circle-chart" viewbox="0 0 33.83098862 33.83098862" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+                  <circle class="circle-chart__circle" id="util${dev_state['name']}_${gpuinfo['gpu_id']}" stroke="#00acc1" stroke-width="2" stroke-dasharray="0,100" stroke-linecap="round" fill="none" cx="16.91549431" cy="16.91549431" r="15.91549431" />
+                  <g class="circle-chart__info">
+                    <text class="circle-chart__percent" id="util-info${dev_state['name']}_${gpuinfo['gpu_id']}" x="16.91549431" y="12.5" alignment-baseline="central" text-anchor="middle" font-size="8">${gpuinfo['utilization_gpu']}%</text>
+                    <text class="circle-chart__subline" x="16.91549431" y="21.5" alignment-baseline="central" text-anchor="middle" font-size="6">USAGE</text>
+                  </g>
+                </svg>
+              </section>
+            </div>
+            <div class="d-mem">
+              <section>
+                <svg class="circle-chart" viewbox="0 0 33.83098862 33.83098862" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+                  <circle class="circle-chart__circle" id="mem${dev_state['name']}_${gpuinfo['gpu_id']}" stroke="#00acc1" stroke-width="2" stroke-dasharray="0,100" stroke-linecap="round" fill="none" cx="16.91549431" cy="16.91549431" r="15.91549431" />
+                  <g class="circle-chart__info">
+                    <text class="circle-chart__percent" id="mem-used${dev_state['name']}_${gpuinfo['gpu_id']}" x="16.91549431" y="12.5" alignment-baseline="central" text-anchor="middle" font-size="7">${Math.round(Number(gpuinfo['used_memory'])/1024*10)/10}GB</text>
+                    <text class="circle-chart__subline" id="mem-total${dev_state['name']}_${gpuinfo['gpu_id']}" x="16.91549431" y="21.5" alignment-baseline="central" text-anchor="middle" font-size="6">/ ${Math.round(Number(gpuinfo['total_memory'])/1024*10)/10}GB</text>
+                  </g>
+                </svg>
+              </section>
+            </div>
+            <div class="d-temp">
+              <section>
+                <svg class="circle-chart" viewbox="0 0 33.83098862 33.83098862" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+                  <circle class="circle-chart__circle" id="temp${dev_state['name']}_${gpuinfo['gpu_id']}" stroke="#00acc1" stroke-width="2" stroke-dasharray="0,100" stroke-linecap="round" fill="none" cx="16.91549431" cy="16.91549431" r="15.91549431" />
+                  <g class="circle-chart__info">
+                    <text class="circle-chart__percent" x="16.91549431" id="temp-info${dev_state['name']}_${gpuinfo['gpu_id']}" y="12.5" alignment-baseline="central" text-anchor="middle" font-size="8">${gpuinfo['temperature_gpu']}°C</text>
+                    <text class="circle-chart__subline" x="16.91549431" y="21.5" alignment-baseline="central" text-anchor="middle" font-size="6">TEMP</text>
+                  </g>
+                </svg>
+              </section>
+            </div>
+            <div class="d-pow">
+              <section>
+                <svg class="circle-chart" viewbox="0 0 33.83098862 33.83098862" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+                  <circle class="circle-chart__circle" id="pow${dev_state['name']}_${gpuinfo['gpu_id']}" stroke="#00acc1" stroke-width="2" stroke-dasharray="0,100" stroke-linecap="round" fill="none" cx="16.91549431" cy="16.91549431" r="15.91549431" />
+                  <g class="circle-chart__info">
+                    <text class="circle-chart__percent" id="pow-info${dev_state['name']}_${gpuinfo['gpu_id']}" x="16.91549431" y="12.5" alignment-baseline="central" text-anchor="middle" font-size="8">${parseInt(Number(gpuinfo['power_draw']))}W</text>
+                    <text class="circle-chart__subline" x="16.91549431" y="21.5" alignment-baseline="central" text-anchor="middle" font-size="6">POWER</text>
+                  </g>
+                </svg>
+              </section>
+            </div>
+          </div>`
+        }
+        return `<div class="dev-box themed">
+        <div class="dev-head">
+          <div>
+            <span class="sb title-server">MLLAB ${dev_state['name']}</span>
+          </div>
+          <div class="d-info-basic">
+            <div class="sl driver-version">DRIVER Version : ${dev_state['driver_version']}</div>
+            <div class="sl cuda-version">CUDA Version : ${dev_state['cuda_version']}</div>
+          </div>
+        </div>
+
+        <div class="user-box" id="user${dev_state['name']}">` + userHTML(dev_state['users']) +
+          `</div>
+        <div class="dev-body">` + gpuHTML + `</div></div>`;
+      }
+
+      function ColorByValue(value, pivots, colors){
+        if(pivots.length != colors.length-1){
+          throw new Error("Should be one more Color than pivots' length.")
+        }
+
+        let i = 0;
+        for(;i<pivots.length; i++){
+          if(value < pivots[i]){
+            return colors[i];
+          }
+        }
+        return colors[i];
+
+      }
+
+      function updateGPUinfo(dev_id, gpu_id, pstate, timestamp, gpu_name, fan_speed, temp, usage, used_mem, total_mem, power_draw, power_limit){
+        
+        const colors = ["#00acc1", "#70cea1", "#C1C120", "#EF9B57", "#FF2020"];
+
+        let selector = `${dev_id}` + '_' +`${gpu_id}` ;
+
+        // PSTATE
+        let pn = Number(pstate.slice(1));
+        let gpubox = $(`#gpu${selector}`);
+        if(pn > 5){// IDLE
+          if(gpubox.hasClass("using"))
+            gpubox.removeClass("using");
+          
+        }
+        else{ // HIGH PERFORMANCE
+          if(!gpubox.hasClass("using"))
+            gpubox.addClass("using");
+        }
+
+        // TIMESTAMP UPDATE
+        $(`#time${selector}`).text(timestamp.slice(0,-4));
+
+        // GPU NAME UPDATE
+        $(`name${selector}`).text(gpu_name)
+
+        // FAN SPEED
+        $(`#fan${selector}`).css({'animation-duration':`${Number(fan_speed) > 0? -Number(fan_speed)/100*2.7+3 : 0}s`});
+        $(`#fan-info${selector}`).text(`${fan_speed}%`);
+
+        // UTILIZATIOn UPDATE
+        util_pivots = [30, 50, 70, 90]
+        util_color = ColorByValue(usage, util_pivots, colors);
+        $(`#util${selector}`).attr({"stroke-dasharray":`${Number(usage)},100`, "stroke":util_color})
+        $(`#util-info${selector}`).text(`${usage}%`);
+
+        // TEMPERATURE UPDATGE
+        temp_pivots = [60, 70, 80, 90];
+        temp_color = ColorByValue(Number(temp),temp_pivots,colors);
+        $(`#temp${selector}`).attr({"stroke-dasharray":`${Number(temp)},100`, "stroke":temp_color})
+        $(`#temp-info${selector}`).text(`${temp}°C`);
+
+        // MEMORY UPDATE
+      	let mem = Number(used_mem) / Number(total_mem);
+        mem_pivots = [0.3, 0.5, 0.7, 0.9];
+        mem_color = ColorByValue(mem, mem_pivots, colors);
+        $(`#mem${selector}`).attr({"stroke-dasharray":`${Number(mem)*100},100`, "stroke":mem_color})
+        $(`#mem-used${selector}`).text(`${Math.round(Number(used_mem)/1024*10)/10}GB`);
+
+        // POWER UPDATE
+        let pow = Number(power_draw) / Number(power_limit);
+        power_pivots = [0.3, 0.5, 0.7, 0.9];
+        power_color = ColorByValue(pow, power_pivots, colors);
+        $(`#pow${selector}`).attr({"stroke-dasharray":`${Number(pow*100)},100`, "stroke":power_color})
+        $(`#pow-info${selector}`).text(`${parseInt(Number(power_draw))}W`);
+
+      }
+
+      function updateDevinfo(dev_id, users){
+        let usersHTML = userHTML(users);
+        if(usersHTML === "")
+          $(`#user${dev_id}`).html('<div class="d-user">No Users</div>');
+        else
+      	  $(`#user${dev_id}`).html(userHTML(users));
+      }
+
+      function refresh(){
+      	$.get(addr,(res)=>{
+      		state = $.parseJSON(res);
+      		for (const [key, value] of Object.entries(state)){
+            updateDevinfo(key, value['users']);
+            for(const gpuinfo of value['gpus'])
+              updateGPUinfo(value['name'], gpuinfo['gpu_id'], gpuinfo['pstate'], gpuinfo['timestamp'], gpuinfo['gpu_name'], gpuinfo['fan_speed'], gpuinfo['temperature_gpu'], gpuinfo['utilization_gpu'], gpuinfo['used_memory'], gpuinfo['total_memory'], gpuinfo['power_draw'], gpuinfo['power_limit']);
+      		}
+      	})
+      }
+
+      $(document).ready(function(){
+
+        $.get(addr,(res)=>{
+      		state = $.parseJSON(res);
+          let dashboardHTML = "";
+      		for (const [key, value] of Object.entries(state)){
+            dashboardHTML += newElement(value);
+      		}
+          $('#dashboard').html(dashboardHTML);
+      	})
+
+        if (getUserTheme() === 'dark') {
+          localStorage.setItem('color-theme', 'dark');
+          document.documentElement.setAttribute('color-theme', 'dark');
+          $('#skin').prop('checked', 'true')
+          dark_mode = true;
+        } else {
+          localStorage.setItem('color-theme', 'light');
+          document.documentElement.setAttribute('color-theme', 'light');
+          dark_mode = false;
+        }
+
+        setInterval(refresh, 1000);
+
+        $('#skin').on('click', evnt => {
+          if(evnt.target.checked){
+            localStorage.setItem('color-theme', 'dark');
+            document.documentElement.setAttribute('color-theme', 'dark');
+            dark_mode = true;
+          }
+          else{
+            localStorage.setItem('color-theme', 'light');
+            document.documentElement.setAttribute('color-theme', 'light');
+            dark_mode = false;
+          }
+        });
+      });
+
+    </script>
+    <link rel="stylesheet" href="index.css">
+    <style>
+      
+    </style>
+  </head>
+  <body>
+    <!-- HEADER -->
+    <div id="header">
+      <label>
+        <input id="skin" role="switch" type="checkbox" />
+        <span class="selector themed-t" id="toggle-text">다크모드</span>
+      </label>
+    </div>
+
+    <!-- GRID -->
+    <div id="dashboard">
+
+    </div>
+  </body>
+</html>

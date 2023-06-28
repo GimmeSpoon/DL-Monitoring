@@ -1,0 +1,271 @@
+/** CSS circular chart codes are from CodePen example by Markus Oberlehner 
+ * Link (https://codepen.io/maoberlehner/pen/jwVWQz)
+ * Toggle Switch (Light n Dark mode) codes are from CodePen example by Dale Seo 
+ * Link (https://codepen.io/daleseo/pen/YzLjqYd)
+ */
+
+.selector {
+	-webkit-user-drag: none;
+}
+
+:root[color-theme='dark'] {
+	--background:#242424;
+	--boxColor: black;
+	--lightboxColor: rgb(88, 88, 88);
+	--usingColor: rgb(150,40,40);
+	--color:white;
+}
+
+:root[color-theme='light']{
+	--background: white;
+	--boxColor: rgb(181, 224, 224);
+	--lightboxColor: rgb(225, 255, 255);
+	--usingColor: rgb(240, 230, 130);
+	--color:black;
+}
+
+html {
+	background: var(--background);
+}
+
+body {
+	margin:0;
+	padding:0;
+}
+
+.themed-t {
+	font-family: 'NanumSquareacB', sans-serif;
+	color: var(--color);
+}
+
+.themed {
+	background: var(--boxColor);
+	color: var(--color);
+}
+
+#header {
+	display:flex
+}
+
+#toggle-text {
+	font-size: 18px;
+}
+
+#dashboard {
+	width:100%;
+	height:auto;
+	display: grid;
+	text-align: center;
+}
+
+label {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin:10px 0 0 10px;
+	cursor: pointer;
+	font-size: 24px;
+}
+
+[type="checkbox"] {
+	appearance: none;
+	position: relative;
+	border: max(2px, 0.1em) solid gray;
+	border-radius: 1.25em;
+	width: 2.25em;
+	height: 1.25em;
+	font-size: 18px;
+}
+
+[type="checkbox"]::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	width: 1em;
+	height: 1em;
+	border-radius: 50%;
+	transform: scale(0.8);
+	background-color: gray;
+	transition: left 250ms linear;
+}
+
+[type="checkbox"]:checked {
+	background-color: rgb(26, 141, 122);
+	border-color: rgb(26, 141, 122);
+}
+
+[type="checkbox"]:checked::before {
+	background-color: white;
+	left: 1em;
+}
+
+@media only screen and (max-width: 768px) {
+	#dashboard{
+		height:auto;
+		grid-template-columns: 1fr;
+	}
+
+	.dev-box{
+		max-height: none;
+	}
+}
+
+@media only screen and (min-width: 768px) {
+	#dashboard{
+		grid-template-rows: auto 1ft;
+		grid-template-columns: repeat(auto-fit, minmax(33%, 50%));
+	}
+
+}
+
+@media only screen and (min-width: 1120px) {
+	#dashboard{
+		grid-template-rows: auto 1ft;
+		grid-template-columns: repeat(auto-fit, minmax(25%, 33%));
+	}
+
+}
+
+@media only screen and (min-width: 1460px) {
+	#dashboard{
+		grid-template-rows: auto 1ft;
+		grid-template-columns: repeat(auto-fit, minmax(20%, 25%));
+	}
+
+}
+
+
+@media only screen and (min-width: 1800px) {
+	#dashboard{
+		grid-template-rows: auto 1ft;
+		grid-template-columns: repeat(auto-fit, 20%);
+	}
+
+}
+
+.dev-box{
+	height:auto;
+	min-height: 200px;
+	margin: 10px;
+	padding:5px 5px 10px 5px;
+	border-radius: 20px;
+	background: var(--boxColor);
+	display:block;
+}
+
+.dev-head {
+	margin:5px;
+	text-align: center;
+}
+
+.sb {
+	font-family: 'NanumSquareExtraBold';
+	font-size:24px;
+}
+
+.sl{
+	font-family: 'NanumSquare';
+	font-size:12px;
+	display: inline-block;
+	margin: 0 8px 0 8px;
+}
+
+.d-info-basic {
+	margin: 5px 0 0 0;
+}
+
+.d-user {
+	margin:0 10px 5px 10px;
+	font-family: 'NanumSquareacB';
+	font-size:14px;
+	display: inline-block;
+}
+
+.user-box {
+	margin:5px 0 0 0;
+	max-height:20%;
+	font-family: 'NanumSquareacB';
+	font-size:14px;
+}
+
+.dev-body {
+	width:100%;
+	max-height:80%;
+	display:block;
+	/*grid-template-rows: repeat(auto-fit, minmax(50%, auto));
+	grid-template-columns: 1fr 1fr;*/
+}
+
+.using {
+	background: var(--usingColor)!important;
+}
+
+.gpu-box {
+	margin:5px;
+	padding:0 0 10px 0;
+	border-radius: 10px;
+	background:var(--lightboxColor);
+	display:grid;
+	grid-template-rows: 1fr;
+	grid-template-columns: 45px 1fr 1fr 1fr 1fr;
+	gap: 5px;
+}
+
+.gpu-head {
+	margin:10px 0 5px 0;
+	grid-column: span 5;
+	font-family: 'NanumSquareacB';
+}
+
+.timestamp {
+	font-size:12px;
+}
+
+@keyframes rotating {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(-360deg);
+	}
+}
+
+.fan-container {
+	padding:5px;
+	font-family:'NanumSquare';
+	font-size:14px;
+	text-align: right;
+}
+
+.fan {
+	text-align: right;
+	width:28px;
+	height:28px;
+	font-size:28px;
+	animation: rotating linear infinite;
+	animation-duration: 0s;
+	transform-origin: center;
+}
+
+.gauge {
+	text-align: center;
+}
+
+.gauge-info {
+	font-family:'NanumSquare';
+	font-size:10px;
+}
+
+.circle-chart__circle {
+	transform: rotate(-90deg); /* 2, 3 */
+	transform-origin: center; /* 4 */
+}
+  
+.circle-chart__info {
+	font-family: 'NanumSquareacB';
+	fill:var(--color);
+}
+
+section {
+	display:inline-block;
+}
