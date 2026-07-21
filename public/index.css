@@ -269,3 +269,124 @@ label {
 section {
 	display:inline-block;
 }
+
+/* ---- v2: top navigation ---- */
+
+#nav {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-right: 16px;
+	font-family: 'NanumSquareacB';
+}
+
+#nav a {
+	color: var(--color);
+	text-decoration: none;
+	font-size: 15px;
+}
+
+#nav a.active {
+	text-decoration: underline;
+}
+
+/* ---- v2: per-server system row (CPU / RAM / disks) ---- */
+
+.sys-box {
+	margin:5px;
+	padding:0 0 10px 0;
+	border-radius: 10px;
+	background:var(--lightboxColor);
+	display:grid;
+	grid-template-rows: auto 1fr;
+	grid-template-columns: 1fr 1fr 1.8fr;
+	gap: 5px;
+}
+
+.sys-head {
+	margin:10px 10px 5px 10px;
+	grid-column: span 3;
+	font-family: 'NanumSquareacB';
+	display: flex;
+	justify-content: space-between;
+}
+
+.sys-load {
+	font-family: 'NanumSquare';
+	font-size: 12px;
+	align-self: center;
+}
+
+.disk-list {
+	padding: 0 10px 0 0;
+	align-self: center;
+	min-width: 0;
+}
+
+.disk-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-family: 'NanumSquare';
+	font-size: 11px;
+	margin: 4px 0;
+}
+
+.disk-mount {
+	max-width: 6em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: rtl; /* long paths: keep the mount's last component visible */
+	text-align: left;
+}
+
+.disk-bar {
+	flex: 1;
+	height: 8px;
+	border-radius: 4px;
+	background: var(--background);
+	overflow: hidden;
+}
+
+.disk-fill {
+	height: 100%;
+	border-radius: 4px;
+	background: #00acc1;
+	width: 0%;
+}
+
+.disk-text {
+	white-space: nowrap;
+}
+
+.no-gpu {
+	margin: 10px;
+	font-family: 'NanumSquare';
+	font-size: 13px;
+	opacity: 0.6;
+}
+
+/* ---- v2: offline server cards ---- */
+
+.offline {
+	opacity: 0.45;
+	filter: grayscale(0.7);
+}
+
+.offline-badge {
+	display: none;
+	font-family: 'NanumSquareExtraBold';
+	font-size: 12px;
+	color: #FF2020;
+	border: 1px solid #FF2020;
+	border-radius: 6px;
+	padding: 1px 6px;
+	vertical-align: middle;
+	margin-left: 8px;
+}
+
+.offline .offline-badge {
+	display: inline-block;
+}

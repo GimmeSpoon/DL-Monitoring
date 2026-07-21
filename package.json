@@ -1,0 +1,17 @@
+{
+  "name": "mllab-monitor",
+  "version": "2.0.0",
+  "description": "MLLAB server monitoring: GPU + CPU/memory/disk over SSH, with history, event log and GPU usage log",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "set-web-password": "node scripts/set-web-password.js",
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.0",
+    "express-session": "^1.18.0",
+    "node-ssh": "^13.2.0"
+  }
+}
