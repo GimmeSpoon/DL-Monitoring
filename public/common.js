@@ -31,6 +31,15 @@ $(function(){
 	});
 });
 
+// fill a <select> with the known servers (live + historical)
+function populateServers($sel, done){
+	$.getJSON('/api/servers').done((data)=>{
+		$sel.html(data.servers.map((s)=>
+			`<option value="${s.name}">${s.name}${s.online ? '' : ' (offline)'}</option>`).join(''));
+		if(done) done(data.servers);
+	});
+}
+
 // any API call answered with 401 -> back to the login page
 $(document).ajaxError((evnt, xhr)=>{
 	if(xhr.status === 401 && !window.location.pathname.endsWith('/login.html')){

@@ -2,6 +2,10 @@ const express = require('express');
 const { config, loadServerList, loadAppConfig } = require('./lib/config');
 const { savePassword, loadPassword } = require('./lib/secrets');
 const { createAuth } = require('./lib/auth');
+const { openDb } = require('./lib/db');
+const { createEvents } = require('./lib/events');
+const { createSessionTracker } = require('./lib/sessions');
+const { createAggregator } = require('./lib/aggregator');
 const { createCollector } = require('./lib/collector');
 const { createMock } = require('./lib/mock');
 const { createRoutes } = require('./lib/routes');
@@ -17,10 +21,12 @@ function log(msg){
 	console.log(`[${new Date().toISOString()}] ${msg}`);
 }
 
-// event sink: console for now, additionally persisted to the DB in lib/events.js
-const onEvent = (type, server, message)=>{
-	log(`(${type}) ${server ? `[${server}] ` : ''}${message}`);
-};
+const db = openDb(config.dataDir);
+db.closeDanglingUsage(); // sessions left open by a crash/restart
+
+const onEvent = createEvents({ db, log }).logEvent;
+const sessions = createSessionTracker({ db });
+const aggregator = createAggregator({ db });
 
 const appConfig = loadAppConfig();
 if(!appConfig.webPasswordHash){
@@ -31,8 +37,13 @@ if(!appConfig.webPasswordHash){
 let collector;
 let monitorControl; // what /kill /revive act on (mock or real collector)
 
+const onIngest = (name, state, apps)=>{
+	aggregator.add(name, state);
+	sessions.observe(name, apps);
+};
+
 if(mockMode){
-	collector = createCollector({ servers: [], password: null, pollIntervalMs: config.pollIntervalMs, reconnectDelayMs: config.reconnectDelayMs, onEvent });
+	collector = createCollector({ servers: [], password: null, pollIntervalMs: config.pollIntervalMs, reconnectDelayMs: config.reconnectDelayMs, onEvent, onIngest });
 	monitorControl = createMock(collector, { onEvent });
 	log('running in --mock mode (synthetic data, no SSH)');
 }
@@ -48,11 +59,21 @@ else{
 		pollIntervalMs: config.pollIntervalMs,
 		reconnectDelayMs: config.reconnectDelayMs,
 		onEvent: onEvent,
+		onIngest: onIngest,
 	});
 	monitorControl = collector;
 }
 
 monitorControl.start();
+onEvent('server_start', null, `v${pkg.version} started${mockMode ? ' (mock)' : ''}`);
+
+setInterval(()=>{
+	aggregator.flush();
+	sessions.flush();
+}, config.flushIntervalMs);
+
+const retention = { metricsDays: 30, eventsDays: 90, usageDays: 365, ...(appConfig.retention || {}) };
+setInterval(()=>db.prune(retention), 3600 * 1000);
 
 const auth = createAuth({ appConfig, onEvent });
 
@@ -66,7 +87,7 @@ app.use(auth.sessionMiddleware);
 app.post('/api/login', auth.login);
 app.post('/api/logout', auth.logout);
 app.use(auth.gate);
-app.use(createRoutes({ collector, monitorControl, onEvent }));
+app.use(createRoutes({ collector, monitorControl, db, onEvent }));
 app.use(express.static(config.publicDir));
 
 app.listen(config.port, ()=>{
