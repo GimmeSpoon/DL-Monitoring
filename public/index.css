@@ -368,6 +368,53 @@ section {
 	opacity: 0.6;
 }
 
+/* ---- v2: login page ---- */
+
+.login-wrap {
+	display: flex;
+	justify-content: center;
+	margin-top: 18vh;
+}
+
+.login-card {
+	border-radius: 20px;
+	padding: 30px 40px;
+	text-align: center;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 240px;
+}
+
+.login-card input[type="password"] {
+	font-family: 'NanumSquare';
+	font-size: 15px;
+	padding: 8px 10px;
+	border: 1px solid var(--lightboxColor);
+	border-radius: 8px;
+	background: var(--background);
+	color: var(--color);
+	text-align: center;
+}
+
+.login-button {
+	font-family: 'NanumSquareExtraBold';
+	font-size: 14px;
+	padding: 8px 0;
+	border: none;
+	border-radius: 8px;
+	background: rgb(26, 141, 122);
+	color: white;
+	cursor: pointer;
+}
+
+.login-error {
+	color: #FF2020;
+	font-family: 'NanumSquare';
+	font-size: 13px;
+	min-height: 1.2em;
+}
+
 /* ---- v2: offline server cards ---- */
 
 .offline {

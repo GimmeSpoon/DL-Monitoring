@@ -1,0 +1,43 @@
+<html lang="en">
+  <head>
+    <title>MLLAB Monitoring - Login</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width">
+    <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.3.js" integrity="sha256-nQLuAZGRRcILA+6dMBOvcRh5Pe310sBpanc6+QBmyVM=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="index.css">
+    <script src="common.js"></script>
+    <script>
+      $(function(){
+        $('#login-form').on('submit', (evnt)=>{
+          evnt.preventDefault();
+          $.ajax({
+            url: '/api/login',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ password: $('#pw').val() }),
+          })
+          .done(()=>{ window.location.href = '/'; })
+          .fail(()=>{ $('#login-error').text('Wrong password.'); $('#pw').val('').focus(); });
+        });
+        $('#pw').focus();
+      });
+    </script>
+  </head>
+  <body>
+    <div id="header">
+      <label>
+        <input id="skin" role="switch" type="checkbox" />
+        <span class="selector themed-t" id="toggle-text">다크모드</span>
+      </label>
+    </div>
+    <div class="login-wrap">
+      <form class="login-card themed" id="login-form">
+        <div class="sb">MLLAB Monitoring</div>
+        <div class="login-error" id="login-error"></div>
+        <input type="password" id="pw" placeholder="password" autocomplete="current-password">
+        <button type="submit" class="login-button">LOGIN</button>
+      </form>
+    </div>
+  </body>
+</html>

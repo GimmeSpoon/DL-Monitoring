@@ -1,6 +1,7 @@
 const express = require('express');
-const { config, loadServerList } = require('./lib/config');
+const { config, loadServerList, loadAppConfig } = require('./lib/config');
 const { savePassword, loadPassword } = require('./lib/secrets');
+const { createAuth } = require('./lib/auth');
 const { createCollector } = require('./lib/collector');
 const { createMock } = require('./lib/mock');
 const { createRoutes } = require('./lib/routes');
@@ -20,6 +21,12 @@ function log(msg){
 const onEvent = (type, server, message)=>{
 	log(`(${type}) ${server ? `[${server}] ` : ''}${message}`);
 };
+
+const appConfig = loadAppConfig();
+if(!appConfig.webPasswordHash){
+	console.error('No web password set. Run first: npm run set-web-password -- <password>');
+	process.exit(1);
+}
 
 let collector;
 let monitorControl; // what /kill /revive act on (mock or real collector)
@@ -47,12 +54,18 @@ else{
 
 monitorControl.start();
 
+const auth = createAuth({ appConfig, onEvent });
+
 const app = express();
 app.use(express.json());
 app.use((req, res, next)=>{
 	log(`${req.ip} ${req.method} ${req.url}`);
 	next();
 });
+app.use(auth.sessionMiddleware);
+app.post('/api/login', auth.login);
+app.post('/api/logout', auth.logout);
+app.use(auth.gate);
 app.use(createRoutes({ collector, monitorControl, onEvent }));
 app.use(express.static(config.publicDir));
 
