@@ -120,9 +120,12 @@ function signature(states){
 function updateGPU(name, gpu){
 	const sel = `${name}_${gpu['gpu_id']}`;
 
-	// P0-P5: high performance (in use), above: idle
-	const pn = Number(gpu['pstate'].slice(1));
-	$(`#gpu${sel}`).toggleClass('using', pn <= 5);
+	// "in use" = a compute process is running, or the GPU is doing work / holding
+	// memory. pstate is NOT used: datacenter GPUs sit at P0 even when idle.
+	const inUse = Number(gpu['procs']) > 0
+		|| Number(gpu['utilization_gpu']) > 0
+		|| Number(gpu['used_memory']) / Number(gpu['total_memory']) > 0.1;
+	$(`#gpu${sel}`).toggleClass('using', inUse);
 
 	$(`#time${sel}`).text(gpu['timestamp'].slice(0, -4));
 	$(`#name${sel}`).text(gpu['gpu_name']);

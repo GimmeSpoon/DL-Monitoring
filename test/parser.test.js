@@ -18,6 +18,7 @@ test('parses real H200 output (bracketed placeholders, no apps)', ()=>{
 	assert.strictEqual(s.gpus[3].pstate, 'P0');
 	assert.deepStrictEqual(s.users, []);
 	assert.deepStrictEqual(s.apps, []);
+	assert.strictEqual(s.gpus[0].procs, 0); // no compute apps -> not "in use"
 
 	assert.strictEqual(s.sysRaw.cpu.cores, 224);
 	assert.deepStrictEqual(s.sysRaw.cpu.load, [10.62, 10.02, 9.72]);
@@ -38,6 +39,8 @@ test('parses synthetic output with apps/users and dedups bind mounts', ()=>{
 	assert.strictEqual(s.apps.length, 3);
 	assert.deepStrictEqual(s.apps[0], { gpu_index: 0, pid: 1234, user: 'alice', used_memory: 2048 });
 	assert.deepStrictEqual(s.apps[2], { gpu_index: 1, pid: 2345, user: 'bob', used_memory: 8192 });
+	assert.strictEqual(s.gpus[0].procs, 2); // alice x2 on GPU 0
+	assert.strictEqual(s.gpus[1].procs, 1); // bob on GPU 1
 
 	// /dev/sda1 appears twice (bind mount); the shortest mount path wins
 	assert.strictEqual(s.sysRaw.disks.length, 2);
