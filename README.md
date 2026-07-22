@@ -65,6 +65,19 @@ cp servers.example.json servers.json
 }
 ```
 
+Running the monitor **on** a GPU box and watching that same machine? Give that
+entry `"local": true` and it runs the commands directly — no SSH, no key, no
+`sshd` for that host. Local and remote entries can mix in one file:
+
+```json
+{
+  "servers": [
+    { "name": "this-box", "local": true },
+    { "name": "server-b", "addr": "gpu-b.example.com", "port": 22, "username": "bob" }
+  ]
+}
+```
+
 3. Set the web login password (what you type in the browser):
 
 ```bash

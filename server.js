@@ -48,12 +48,15 @@ else{
 	const servers = loadServerList();
 	const agentSock = process.env.SSH_AUTH_SOCK || null;
 	const defaultKey = appConfig.sshPrivateKey || process.env.SSH_PRIVATE_KEY || null;
-	if(!agentSock && !defaultKey && !servers.some((s)=>s.privateKey)){
+	// only remote (non-local) servers need SSH auth; a per-server key covers its own entry
+	const remoteNeedingAuth = servers.filter((s)=>!s.local && !s.privateKey);
+	if(remoteNeedingAuth.length && !agentSock && !defaultKey){
 		console.error([
-			'No SSH authentication available. Pick one:',
+			`No SSH authentication for remote servers (${remoteNeedingAuth.map((s)=>s.name).join(', ')}). Pick one:`,
 			'  ssh-agent:  eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519   (re-run after every reboot)',
 			'  key file:   export SSH_PRIVATE_KEY=~/.ssh/id_ed25519              (survives reboot; best for a service)',
 			'              or set "sshPrivateKey" in config.json, or "privateKey" per server in servers.json',
+			'  local box:  add "local": true to a server entry to skip SSH for the machine this runs on',
 		].join('\n'));
 		process.exit(1);
 	}
