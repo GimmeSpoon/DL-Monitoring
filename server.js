@@ -98,6 +98,9 @@ app.use(auth.gate);
 app.use(createRoutes({ collector, monitorControl, db, onEvent }));
 app.use(express.static(config.publicDir));
 
-app.listen(config.port, ()=>{
-	log(`MLLAB Monitoring Server v${pkg.version} has started : ${config.port}`);
+// listen host/port: env (PORT/HOST) wins, then config.json, then the defaults
+const port = Number(process.env.PORT) || appConfig.port || config.port;
+const host = process.env.HOST || appConfig.host || config.host;
+app.listen(port, host || undefined, ()=>{
+	log(`MLLAB Monitoring Server v${pkg.version} listening on ${host || '0.0.0.0'}:${port}`);
 });

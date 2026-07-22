@@ -132,14 +132,28 @@ CPU/RAM/disk and an empty GPU list.
 
 ## Configuration
 
-* `config.json` (auto-created, gitignored) holds the web password hash and
+* **Listen host / port** (default `0.0.0.0:51234`). Set them in `config.json`,
+  or via the `HOST` / `PORT` environment variables (env wins):
+
+```json
+{ "host": "127.0.0.1", "port": 8080 }
+```
+
+```bash
+HOST=127.0.0.1 PORT=8080 npm start
+```
+
+  Bind to `127.0.0.1` if you front the dashboard with a reverse proxy and don't
+  want the port reachable from outside the box.
+
+* `config.json` (auto-created, gitignored) also holds the web password hash and
   session secret. Optional retention overrides (days):
 
 ```json
 { "retention": { "metricsDays": 30, "eventsDays": 90, "usageDays": 365 } }
 ```
 
-* Port and poll/flush intervals: `lib/config.js`.
+* Poll/flush intervals: `lib/config.js`.
 * Metrics are aggregated to one sample per minute in `data/monitor.db`;
   old rows are pruned hourly per the retention settings.
 
