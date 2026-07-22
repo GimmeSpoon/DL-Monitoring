@@ -3,6 +3,7 @@ old/
 *.json
 !package.json
 !package-lock.json
+!servers.example.json
 *.txt
 *.ico
 data/

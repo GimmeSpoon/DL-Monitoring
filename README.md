@@ -48,20 +48,19 @@ cd DL-Monitoring
 npm install
 ```
 
-2. Make a `servers.json` file with your GPU servers (usernames may differ per
-   host — no shared password needed):
+2. Copy the example and edit it for your GPU servers (usernames may differ per
+   host — no shared password needed; add an optional `"privateKey"` to any
+   server that needs a different key than your default):
+
+```bash
+cp servers.example.json servers.json
+```
 
 ```json
 {
-  "servers":[
-    { "name" : "myserver",
-      "addr" : "123.0.0.2",
-      "port" : 22,
-      "username" : "gusfring" },
-    { "name" : "anotherserver",
-      "addr" : "123.0.0.3",
-      "port" : 22,
-      "username" : "kidnamedfinger" }
+  "servers": [
+    { "name": "server-a", "addr": "10.0.0.2", "port": 22, "username": "alice" },
+    { "name": "server-b", "addr": "gpu-b.example.com", "port": 2222, "username": "bob", "privateKey": "~/.ssh/gpu_b_key" }
   ]
 }
 ```
