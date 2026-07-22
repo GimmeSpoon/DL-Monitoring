@@ -58,7 +58,7 @@ test('handles empty/garbage output without throwing', ()=>{
 });
 
 test('collector computes CPU% from consecutive counter deltas', ()=>{
-	const collector = createCollector({ servers: [], password: null, pollIntervalMs: 1000, reconnectDelayMs: 1000 });
+	const collector = createCollector({ servers: [], pollIntervalMs: 1000, reconnectDelayMs: 1000 });
 	const mkParsed = (idle, total)=>({
 		name: 's', driver_version: 'd', cuda_version: 'c', users: [], gpus: [], apps: [],
 		sysRaw: { cpu: { counters: { idle, total }, cores: 8, load: [1, 1, 1] }, memory: null, disks: [] },

@@ -18,7 +18,8 @@ GPU usage log (who used which GPU when), all behind a shared-password login.
 
 * Only supports NVIDIA GPUs.
 * Not useful for massive amounts of servers.
-* SSH accounts on the GPU servers must share the same password.
+* Server auth is via SSH keys; if you use ssh-agent (rather than a key file),
+  the agent must be running and re-loaded after each reboot.
 
 ## Pages
 
@@ -47,8 +48,8 @@ cd DL-Monitoring
 npm install
 ```
 
-2. Make a `servers.json` file with your GPU servers. The accounts must share
-   the same password.
+2. Make a `servers.json` file with your GPU servers (usernames may differ per
+   host — no shared password needed):
 
 ```json
 {
@@ -71,24 +72,37 @@ npm install
 npm run set-web-password -- <WEB_PASSWORD>
 ```
 
-4. Start it. The first time, pass both a master key and the SSH password;
-   the password is stored encrypted (with the master key) in `passwd.txt`.
+4. Give the monitor SSH access to your GPU servers. Put your public key in each
+   server's `~/.ssh/authorized_keys` (for the `username` you set above), then
+   provide the private key one of two ways:
+
+   **ssh-agent** — good for hands-on runs:
+
+   ```bash
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519
+   ```
+
+   The agent is per-shell and does not survive a reboot — you re-run these two
+   commands afterward, and `SSH_AUTH_SOCK` must be visible to whatever process
+   runs the monitor.
+
+   **key file** — best for an always-on service (nothing to redo after a reboot):
+
+   ```bash
+   export SSH_PRIVATE_KEY=~/.ssh/id_ed25519
+   ```
+
+   or set `"sshPrivateKey"` in `config.json`, or `"privateKey"` per server in
+   `servers.json` (a per-server value wins over the default).
+
+5. Start it:
 
 ```bash
-npm start -- <MASTER_KEY> <SSH_PASSWORD>
-```
-
-From then on the master key alone is enough:
-
-```bash
-npm start -- <MASTER_KEY>
+npm start
 ```
 
 Open `http://<monitoring-server>:51234`, log in, done.
-
-> Upgrading from v1? The old `passwd.txt` format was broken and is not
-> readable anymore — run once with both `<MASTER_KEY> <SSH_PASSWORD>` to
-> re-save it.
 
 ## Mock mode (development without GPU servers)
 
@@ -100,8 +114,9 @@ npm start -- --mock
 Serves two synthetic servers with wandering utilization, user churn, and
 occasional connection drops — enough to exercise the dashboard, history,
 and logs end to end. To test real collection without a GPU box, add your
-own machine to `servers.json` (`"addr": "127.0.0.1"` with a local
-`openssh-server`); you get CPU/RAM/disk and an empty GPU list.
+own machine to `servers.json` (`"addr": "127.0.0.1"`, with a local
+`openssh-server` and your key in `~/.ssh/authorized_keys`); you get
+CPU/RAM/disk and an empty GPU list.
 
 ## Configuration
 

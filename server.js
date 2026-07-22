@@ -1,6 +1,5 @@
 const express = require('express');
 const { config, loadServerList, loadAppConfig } = require('./lib/config');
-const { savePassword, loadPassword } = require('./lib/secrets');
 const { createAuth } = require('./lib/auth');
 const { openDb } = require('./lib/db');
 const { createEvents } = require('./lib/events');
@@ -11,11 +10,9 @@ const { createMock } = require('./lib/mock');
 const { createRoutes } = require('./lib/routes');
 const pkg = require('./package.json');
 
-// usage: npm start -- <MASTER_KEY> [<SSH_PASSWORD>] [--mock]
-// --mock needs no keys: it serves synthetic servers without SSH.
-const argv = process.argv.slice(2);
-const mockMode = argv.includes('--mock');
-const positional = argv.filter((a)=>!a.startsWith('--'));
+// usage: npm start            (SSH auth via ssh-agent or a key file)
+//        npm start -- --mock  (synthetic data, no SSH)
+const mockMode = process.argv.slice(2).includes('--mock');
 
 function log(msg){
 	console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -43,19 +40,27 @@ const onIngest = (name, state, apps)=>{
 };
 
 if(mockMode){
-	collector = createCollector({ servers: [], password: null, pollIntervalMs: config.pollIntervalMs, reconnectDelayMs: config.reconnectDelayMs, onEvent, onIngest });
+	collector = createCollector({ servers: [], agentSock: null, defaultKey: null, pollIntervalMs: config.pollIntervalMs, reconnectDelayMs: config.reconnectDelayMs, onEvent, onIngest });
 	monitorControl = createMock(collector, { onEvent });
 	log('running in --mock mode (synthetic data, no SSH)');
 }
 else{
-	if(!positional[0]){
-		console.error('Usage: npm start -- <MASTER_KEY> [<SSH_PASSWORD>] [--mock]');
+	const servers = loadServerList();
+	const agentSock = process.env.SSH_AUTH_SOCK || null;
+	const defaultKey = appConfig.sshPrivateKey || process.env.SSH_PRIVATE_KEY || null;
+	if(!agentSock && !defaultKey && !servers.some((s)=>s.privateKey)){
+		console.error([
+			'No SSH authentication available. Pick one:',
+			'  ssh-agent:  eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519   (re-run after every reboot)',
+			'  key file:   export SSH_PRIVATE_KEY=~/.ssh/id_ed25519              (survives reboot; best for a service)',
+			'              or set "sshPrivateKey" in config.json, or "privateKey" per server in servers.json',
+		].join('\n'));
 		process.exit(1);
 	}
-	const password = positional[1] ? savePassword(positional[1], positional[0]) : loadPassword(positional[0]);
 	collector = createCollector({
-		servers: loadServerList(),
-		password: password,
+		servers: servers,
+		agentSock: agentSock,
+		defaultKey: defaultKey,
 		pollIntervalMs: config.pollIntervalMs,
 		reconnectDelayMs: config.reconnectDelayMs,
 		onEvent: onEvent,
