@@ -30,8 +30,14 @@ GPU usage log (who used which GPU when), all behind a shared-password login.
 
 ## Quickstart
 
-Requires **Node.js >= 24** (for the built-in `node:sqlite`) on the monitoring
-server (meaning not one of the GPU servers).
+Requires **Node.js >= 24** on the monitoring server (meaning not one of the
+GPU servers). On an older Node (>= 14) that lacks the built-in `node:sqlite`,
+install the fallback driver instead:
+
+```bash
+npm install better-sqlite3     # Node 18/20
+npm install better-sqlite3@8   # Node 14/16
+```
 
 1. Clone and install:
 

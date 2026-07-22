@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "MLLAB server monitoring: GPU + CPU/memory/disk over SSH, with history, event log and GPU usage log",
   "main": "server.js",
+  "engines": {
+    "node": ">=14"
+  },
   "scripts": {
     "start": "node server.js",
     "set-web-password": "node scripts/set-web-password.js",
