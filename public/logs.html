@@ -1,12 +1,10 @@
 <html lang="en">
   <head>
-    <title>MLLAB Monitoring - Logs</title>
+    <title>MLLAB Monitor — Logs</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width">
-    <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.6.3.js" integrity="sha256-nQLuAZGRRcILA+6dMBOvcRh5Pe310sBpanc6+QBmyVM=" crossorigin="anonymous"></script>
-    <script src="https://kit.fontawesome.com/108e1caa2e.js" crossorigin="anonymous"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="index.css">
+    <script src="vendor/jquery-3.6.3.min.js"></script>
     <script src="common.js"></script>
     <script>
       const EVENT_TYPES = ['ssh_connect', 'ssh_disconnect', 'ssh_fail', 'login_ok', 'login_fail', 'kill', 'revive', 'collector_error', 'server_start'];
@@ -21,7 +19,6 @@
         return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
       };
       const esc = (x)=>$('<i>').text(x == null ? '' : x).html();
-
       let offsets = { events: 0, usage: 0 };
 
       function typeBadge(type){
@@ -36,7 +33,7 @@
         $.getJSON('/api/events', params).done((data)=>{
           $('#ev-rows').html(data.rows.map((r)=>
             `<tr><td>${fmtTime(r.ts)}</td><td>${typeBadge(r.type)}</td><td>${esc(r.server)}</td><td>${esc(r.message)}</td></tr>`
-          ).join('') || '<tr><td colspan="4">No events</td></tr>');
+          ).join('') || '<tr><td colspan="4">No events in range</td></tr>');
           renderPager('events', data.total, loadEvents);
         });
       }
@@ -50,47 +47,42 @@
           $('#us-rows').html(data.rows.map((r)=>{
             const end = r.end_ts || Math.floor(Date.now() / 1000);
             return `<tr>
-              <td>${esc(r.server)}</td><td>GPU ${r.gpu_index}</td><td><i class="fa-solid fa-user"></i> ${esc(r.username)}</td>
+              <td>${esc(r.server)}</td><td>GPU ${r.gpu_index}</td><td>${window.ICONS.user} ${esc(r.username)}</td>
               <td>${fmtTime(r.start_ts)}</td>
-              <td>${r.end_ts ? fmtTime(r.end_ts) : '<span class="event-type type-ok">ACTIVE</span>'}</td>
+              <td>${r.end_ts ? fmtTime(r.end_ts) : '<span class="event-type type-ok">active</span>'}</td>
               <td>${fmtDuration(Math.max(0, end - r.start_ts))}</td>
             </tr>`;
-          }).join('') || '<tr><td colspan="6">No usage records</td></tr>');
+          }).join('') || '<tr><td colspan="6">No usage records in range</td></tr>');
           renderPager('usage', data.total, loadUsage);
         });
       }
 
       function renderPager(kind, total, reload){
-        const $pager = $(`#${kind}-pager`);
         const page = PAGE[kind];
         const from = total === 0 ? 0 : offsets[kind] + 1;
         const to = Math.min(offsets[kind] + page, total);
-        $pager.html(`
-          <button id="${kind}-prev" ${offsets[kind] === 0 ? 'disabled' : ''}>&laquo; PREV</button>
-          <span>${from}-${to} / ${total}</span>
-          <button id="${kind}-next" ${to >= total ? 'disabled' : ''}>NEXT &raquo;</button>`);
+        $(`#${kind}-pager`).html(`
+          <button id="${kind}-prev" ${offsets[kind] === 0 ? 'disabled' : ''}>&laquo; Prev</button>
+          <span>${from}–${to} of ${total}</span>
+          <button id="${kind}-next" ${to >= total ? 'disabled' : ''}>Next &raquo;</button>`);
         $(`#${kind}-prev`).on('click', ()=>{ offsets[kind] = Math.max(0, offsets[kind] - page); reload(); });
         $(`#${kind}-next`).on('click', ()=>{ offsets[kind] += page; reload(); });
       }
 
       $(function(){
+        $('#brand-mark').html(window.ICONS.signal);
         $('#ev-type').html('<option value="">all types</option>' + EVENT_TYPES.map((t)=>`<option>${t}</option>`).join(''));
-
         populateServers($('#ev-server'), ()=>{
           $('#ev-server').prepend('<option value="" selected>all servers</option>');
           $('#us-server').html($('#ev-server').html());
           loadEvents();
         });
-
         $('.tab').on('click', function(){
-          $('.tab').removeClass('active');
-          $(this).addClass('active');
+          $('.tab').removeClass('active'); $(this).addClass('active');
           const target = $(this).data('target');
-          $('.log-view').hide();
-          $(`#${target}`).show();
+          $('.log-view').hide(); $(`#${target}`).show();
           if(target === 'usage-view') loadUsage(); else loadEvents();
         });
-
         $('#ev-server, #ev-type').on('change', ()=>{ offsets.events = 0; loadEvents(); });
         $('#us-server, #us-active').on('change', ()=>{ offsets.usage = 0; loadUsage(); });
         $('#us-user').on('keydown', (evnt)=>{ if(evnt.key === 'Enter'){ offsets.usage = 0; loadUsage(); } });
@@ -98,27 +90,28 @@
     </script>
   </head>
   <body>
-    <div id="header">
-      <label>
-        <input id="skin" role="switch" type="checkbox" />
-        <span class="selector themed-t" id="toggle-text">다크모드</span>
-      </label>
-      <nav id="nav"></nav>
-    </div>
+    <header class="topbar">
+      <a class="brand" href="/"><span id="brand-mark"></span> MLLAB <span>Monitor</span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="topbar-right">
+        <button id="skin" class="icon-btn" type="button" aria-label="Toggle theme"></button>
+        <a href="#" id="logout" class="logout">Logout</a>
+      </div>
+    </header>
 
     <div class="tabs">
-      <button class="tab active" data-target="events-view">EVENTS</button>
-      <button class="tab" data-target="usage-view">GPU USAGE</button>
+      <button class="tab active" data-target="events-view">Events</button>
+      <button class="tab" data-target="usage-view">GPU usage</button>
     </div>
 
     <div class="log-view" id="events-view">
       <div class="controls">
-        <span>SERVER</span> <select id="ev-server"></select>
-        <span>TYPE</span> <select id="ev-type"></select>
+        <label>Server <select id="ev-server"></select></label>
+        <label>Type <select id="ev-type"></select></label>
       </div>
       <div class="log-panel">
         <table class="log-table">
-          <thead><tr><th>TIME</th><th>TYPE</th><th>SERVER</th><th>MESSAGE</th></tr></thead>
+          <thead><tr><th>Time</th><th>Type</th><th>Server</th><th>Message</th></tr></thead>
           <tbody id="ev-rows"></tbody>
         </table>
         <div class="pager" id="events-pager"></div>
@@ -127,13 +120,13 @@
 
     <div class="log-view" id="usage-view" style="display:none">
       <div class="controls">
-        <span>SERVER</span> <select id="us-server"></select>
-        <span>USER</span> <input type="text" id="us-user" placeholder="any user">
-        <label class="us-active-label"><input type="checkbox" id="us-active"> active only</label>
+        <label>Server <select id="us-server"></select></label>
+        <label>User <input type="text" id="us-user" placeholder="any user"></label>
+        <label><input type="checkbox" id="us-active"> active only</label>
       </div>
       <div class="log-panel">
         <table class="log-table">
-          <thead><tr><th>SERVER</th><th>GPU</th><th>USER</th><th>START</th><th>END</th><th>DURATION</th></tr></thead>
+          <thead><tr><th>Server</th><th>GPU</th><th>User</th><th>Start</th><th>End</th><th>Duration</th></tr></thead>
           <tbody id="us-rows"></tbody>
         </table>
         <div class="pager" id="usage-pager"></div>

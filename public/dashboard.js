@@ -1,26 +1,20 @@
-// Dashboard: builds each server card once (buildServerCard) and then only
-// fills in values every second (updateServer). The card structure is rebuilt
-// only when the set of servers / GPUs / mounts changes.
+// Dashboard: build each server card once, then only update values every second.
+// Cards rebuild only when the set of servers / GPUs / mounts changes.
 
 const addr = '/monitor';
-const colors = ['#00acc1', '#70cea1', '#C1C120', '#EF9B57', '#FF2020'];
-const util_pivots = [30, 50, 70, 90];   // %
-const temp_pivots = [60, 70, 80, 90];   // °C
+
+// green -> red thermal ramp (load / heat). cyan is reserved for "in use".
+const thermal = ['#2ea043', '#3fb950', '#d6b02f', '#e0863d', '#f0533f'];
+const util_pivots = [30, 50, 70, 90];    // %
+const temp_pivots = [50, 65, 80, 90];    // °C
 const ratio_pivots = [0.3, 0.5, 0.7, 0.9];
 
 let lastSignature = null;
 
-function ColorByValue(value, pivots, colors){
-	if(pivots.length != colors.length - 1){
-		throw new Error("Should be one more Color than pivots' length.");
-	}
+function colorFor(value, pivots){
 	let i = 0;
-	for(; i < pivots.length; i++){
-		if(value < pivots[i]){
-			return colors[i];
-		}
-	}
-	return colors[i];
+	for(; i < pivots.length; i++){ if(value < pivots[i]) return thermal[i]; }
+	return thermal[i];
 }
 
 const fmtBytes = (b)=>{
@@ -31,164 +25,138 @@ const fmtBytes = (b)=>{
 	return `${Math.round(b / MB)}M`;
 };
 
-const userHTML = (users)=>{
-	let html = '';
-	for(const user of users){
-		html += `<div class="d-user"><i class="fa-solid fa-user"></i> ${user}</div>`;
-	}
-	return html;
-};
-
-// SVG circular gauge; ids: <prefix><sel> (circle), <prefix>-info<sel> (main
-// text), <prefix>-sub<sel> (subline)
-function gauge(prefix, sel, subText, mainFontSize = 8){
-	return `<section>
-		<svg class="circle-chart" viewbox="0 0 33.83098862 33.83098862" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
-			<circle class="circle-chart__circle" id="${prefix}${sel}" stroke="#00acc1" stroke-width="2" stroke-dasharray="0,100" stroke-linecap="round" fill="none" cx="16.91549431" cy="16.91549431" r="15.91549431" />
-			<g class="circle-chart__info">
-				<text class="circle-chart__percent" id="${prefix}-info${sel}" x="16.91549431" y="12.5" alignment-baseline="central" text-anchor="middle" font-size="${mainFontSize}"></text>
-				<text class="circle-chart__subline" id="${prefix}-sub${sel}" x="16.91549431" y="21.5" alignment-baseline="central" text-anchor="middle" font-size="6">${subText}</text>
-			</g>
-		</svg>
-	</section>`;
+// set a meter's fill (width + thermal color) and its readout text
+function setMeter(id, pct, color, text){
+	const p = Math.max(0, Math.min(100, Number(pct) || 0));
+	$(`#${id}`).css({ width: `${p}%`, background: color });
+	$(`#${id}-val`).text(text);
 }
 
-function setGauge(prefix, sel, percent, color, mainText){
-	const pct = Math.max(0, Math.min(100, Number(percent) || 0));
-	$(`#${prefix}${sel}`).attr({ 'stroke-dasharray': `${pct},100`, 'stroke': color });
-	$(`#${prefix}-info${sel}`).text(mainText);
-}
-
-function buildGpuBox(name, gpu){
-	const sel = `${name}_${gpu['gpu_id']}`;
-	return `<div class="gpu-box" id="gpu${sel}">
-		<div class="gpu-head">
-			<div class="timestamp" id="time${sel}"></div>
-			<div class="gpuname" id="name${sel}"></div>
-		</div>
-		<div class="fan-container gauge">
-			<div class="fan" id="fan${sel}"><i class="fa-solid fa-fan"></i></div>
-			<span id="fan-info${sel}"></span>
-		</div>
-		<div class="d-util">${gauge('util', sel, 'USAGE')}</div>
-		<div class="d-mem">${gauge('mem', sel, '', 7)}</div>
-		<div class="d-temp">${gauge('temp', sel, 'TEMP')}</div>
-		<div class="d-pow">${gauge('pow', sel, 'POWER')}</div>
+function meterHTML(id, label){
+	return `<div class="meter">
+		<span class="meter-label">${label}</span>
+		<div class="meter-track"><div class="meter-fill" id="${id}"></div></div>
+		<span class="meter-val" id="${id}-val"></span>
 	</div>`;
 }
 
-function buildServerCard(state){
+function buildGpu(name, gpu){
+	const sel = `${name}_${gpu['gpu_id']}`;
+	return `<div class="gpu" id="gpu${sel}">
+		<div class="gpu-top">
+			<span class="gpu-badge">GPU ${gpu['gpu_id']}</span>
+			<span class="gpu-name" id="name${sel}"></span>
+			<span class="gpu-flag" id="flag${sel}"><span class="dot"></span><span id="flag-txt${sel}">idle</span></span>
+		</div>
+		${meterHTML(`util${sel}`, 'UTIL')}
+		${meterHTML(`mem${sel}`, 'MEM')}
+		<div class="gpu-stats">
+			<span class="stat"><span class="k">TEMP</span> <b id="temp${sel}">--</b></span>
+			<span class="stat"><span class="k">PWR</span> <b id="pow${sel}">--</b></span>
+			<span class="stat fan"><span class="fan-ico" id="fan${sel}">${window.ICONS.fan}</span> <b id="fan-val${sel}">--</b></span>
+		</div>
+	</div>`;
+}
+
+function buildCard(state){
 	const name = state['name'];
 	const disks = (state['system'] && state['system']['disks']) || [];
 	const diskHTML = disks.map((d, i)=>
 		`<div class="disk-row">
 			<span class="disk-mount" title="${d['mount']}">${d['mount']}</span>
-			<div class="disk-bar"><div class="disk-fill" id="diskfill${name}_${i}"></div></div>
-			<span class="disk-text" id="disktext${name}_${i}"></span>
+			<div class="meter-track"><div class="meter-fill" id="disk${name}_${i}"></div></div>
+			<span class="disk-text" id="disk-text${name}_${i}"></span>
 		</div>`).join('');
 	const gpuHTML = state['gpus'].length
-		? state['gpus'].map((g)=>buildGpuBox(name, g)).join('')
-		: '<div class="no-gpu">No GPUs</div>';
+		? state['gpus'].map((g)=>buildGpu(name, g)).join('')
+		: '<div class="no-gpu">No GPUs on this host</div>';
 
-	return `<div class="dev-box themed" id="dev${name}">
-		<div class="dev-head">
-			<div>
-				<span class="sb title-server">MLLAB ${name}</span><span class="offline-badge">OFFLINE</span>
-			</div>
-			<div class="d-info-basic">
-				<div class="sl driver-version" id="driver${name}"></div>
-				<div class="sl cuda-version" id="cuda${name}"></div>
-			</div>
+	return `<section class="card" id="dev${name}">
+		<div class="card-head">
+			<span class="status" id="status${name}"></span>
+			<span class="srv-name">${name}</span>
+			<span class="srv-flag">OFFLINE</span>
+			<span class="srv-meta"><span id="driver${name}"></span><span id="cuda${name}"></span></span>
 		</div>
-		<div class="user-box" id="user${name}"></div>
-		<div class="sys-box" id="sys${name}">
-			<div class="sys-head"><span>SYSTEM</span><span class="sys-load" id="load${name}"></span></div>
-			<div class="d-util">${gauge('cpu', name, 'CPU')}</div>
-			<div class="d-mem">${gauge('ram', name, '', 7)}</div>
-			<div class="disk-list" id="disks${name}">${diskHTML}</div>
+		<div class="sys">
+			${meterHTML(`cpu${name}`, 'CPU')}
+			${meterHTML(`ram${name}`, 'RAM')}
+			<div class="sys-sub" id="load${name}"></div>
+			<div class="disks">${diskHTML}</div>
 		</div>
-		<div class="dev-body">${gpuHTML}</div>
-	</div>`;
+		<div class="users" id="user${name}"></div>
+		<div class="gpus">${gpuHTML}</div>
+	</section>`;
 }
 
-// structure only changes when servers / GPUs / mounts change
+// structure changes only when servers / GPU counts / mount sets change
 function signature(states){
 	return JSON.stringify(Object.entries(states).map(([key, s])=>
 		[key, s['gpus'].length, ((s['system'] && s['system']['disks']) || []).map((d)=>d['mount'])]));
 }
 
-function updateGPU(name, gpu){
+function updateGpu(name, gpu){
 	const sel = `${name}_${gpu['gpu_id']}`;
 
 	// "in use" = a compute process is running, or the GPU is doing work / holding
 	// memory. pstate is NOT used: datacenter GPUs sit at P0 even when idle.
-	const inUse = Number(gpu['procs']) > 0
-		|| Number(gpu['utilization_gpu']) > 0
-		|| Number(gpu['used_memory']) / Number(gpu['total_memory']) > 0.1;
-	$(`#gpu${sel}`).toggleClass('using', inUse);
+	const memRatio = Number(gpu['used_memory']) / Number(gpu['total_memory']);
+	const inUse = Number(gpu['procs']) > 0 || Number(gpu['utilization_gpu']) > 0 || memRatio > 0.1;
+	$(`#gpu${sel}`).toggleClass('busy', inUse);
+	$(`#flag-txt${sel}`).text(inUse ? (Number(gpu['procs']) > 0 ? `busy · ${gpu['procs']} proc${gpu['procs'] > 1 ? 's' : ''}` : 'busy') : 'idle');
 
-	$(`#time${sel}`).text(gpu['timestamp'].slice(0, -4));
 	$(`#name${sel}`).text(gpu['gpu_name']);
+
+	const util = Number(gpu['utilization_gpu']);
+	setMeter(`util${sel}`, util, colorFor(util, util_pivots), `${util}%`);
+	setMeter(`mem${sel}`, memRatio * 100, colorFor(memRatio * 100, util_pivots),
+		`${Math.round(Number(gpu['used_memory']) / 1024 * 10) / 10}/${Math.round(Number(gpu['total_memory']) / 1024)}G`);
+
+	const temp = Number(gpu['temperature_gpu']);
+	$(`#temp${sel}`).text(`${temp}°C`).css('color', colorFor(temp, temp_pivots));
+	$(`#pow${sel}`).text(`${parseInt(Number(gpu['power_draw']))}/${parseInt(Number(gpu['power_limit']))}W`);
 
 	const fan = Number(gpu['fan_speed']);
 	if(Number.isFinite(fan)){
-		$(`#fan${sel}`).css({ 'animation-duration': `${fan > 0 ? -fan / 100 * 2.7 + 3 : 0}s` });
-		$(`#fan-info${sel}`).text(`${gpu['fan_speed']}%`);
+		$(`#fan${sel}`).css('animation-duration', fan > 0 ? `${-fan / 100 * 2.7 + 3}s` : '0s');
+		$(`#fan-val${sel}`).text(`${gpu['fan_speed']}%`);
 	}
-	else{ // datacenter GPUs report no fan
-		$(`#fan${sel}`).css({ 'animation-duration': '0s' });
-		$(`#fan-info${sel}`).text('N/A');
+	else{
+		$(`#fan${sel}`).css('animation-duration', '0s');
+		$(`#fan-val${sel}`).text('—');
 	}
-
-	const usage = Number(gpu['utilization_gpu']);
-	setGauge('util', sel, usage, ColorByValue(usage, util_pivots, colors), `${usage}%`);
-
-	const temp = Number(gpu['temperature_gpu']);
-	setGauge('temp', sel, temp, ColorByValue(temp, temp_pivots, colors), `${temp}°C`);
-
-	const memRatio = Number(gpu['used_memory']) / Number(gpu['total_memory']);
-	setGauge('mem', sel, memRatio * 100, ColorByValue(memRatio, ratio_pivots, colors), `${Math.round(Number(gpu['used_memory']) / 1024 * 10) / 10}GB`);
-	$(`#mem-sub${sel}`).text(`/ ${Math.round(Number(gpu['total_memory']) / 1024 * 10) / 10}GB`);
-
-	const powRatio = Number(gpu['power_draw']) / Number(gpu['power_limit']);
-	setGauge('pow', sel, powRatio * 100, ColorByValue(powRatio, ratio_pivots, colors), `${parseInt(Number(gpu['power_draw']))}W`);
 }
 
-function updateServer(state){
+function updateCard(state){
 	const name = state['name'];
 	$(`#dev${name}`).toggleClass('offline', state['online'] === false);
-	$(`#driver${name}`).text(`DRIVER Version : ${state['driver_version'] || 'N/A'}`);
-	$(`#cuda${name}`).text(`CUDA Version : ${state['cuda_version'] || 'N/A'}`);
+	$(`#status${name}`).attr('title', state['online'] === false ? 'offline' : 'online');
+	$(`#driver${name}`).text(state['driver_version'] ? `drv ${state['driver_version']}` : '');
+	$(`#cuda${name}`).text(state['cuda_version'] && state['cuda_version'] !== 'Not Available' ? `cuda ${state['cuda_version']}` : '');
+
 	$(`#user${name}`).html(state['users'] && state['users'].length
-		? userHTML(state['users'])
-		: '<div class="d-user">No Users</div>');
+		? state['users'].map((u)=>`<span class="chip">${window.ICONS.user}${u}</span>`).join('')
+		: '<span class="chip empty">no active users</span>');
 
 	const sys = state['system'] || {};
 	if(sys['cpu']){
-		const util = sys['cpu']['util'];
-		if(util === null || util === undefined){
-			setGauge('cpu', name, 0, colors[0], '--'); // needs two polls after (re)connect
-		}
-		else{
-			setGauge('cpu', name, util, ColorByValue(util, util_pivots, colors), `${Math.round(util)}%`);
-		}
+		const u = sys['cpu']['util'];
+		if(u === null || u === undefined) setMeter(`cpu${name}`, 0, thermal[0], '-- %');   // needs 2 polls
+		else setMeter(`cpu${name}`, u, colorFor(u, util_pivots), `${Math.round(u)}%`);
 		const load = sys['cpu']['load'] ? sys['cpu']['load'][0] : '--';
-		$(`#load${name}`).text(`LOAD ${load} · ${sys['cpu']['cores'] != null ? sys['cpu']['cores'] : '--'} CORES`);
+		$(`#load${name}`).text(`load ${load}  ·  ${sys['cpu']['cores'] != null ? sys['cpu']['cores'] : '--'} cores`);
 	}
 	if(sys['memory']){
-		const ratio = sys['memory']['used'] / sys['memory']['total'];
-		setGauge('ram', name, ratio * 100, ColorByValue(ratio, ratio_pivots, colors), fmtBytes(sys['memory']['used']));
-		$(`#ram-sub${name}`).text(`/ ${fmtBytes(sys['memory']['total'])}`);
+		const r = sys['memory']['used'] / sys['memory']['total'];
+		setMeter(`ram${name}`, r * 100, colorFor(r * 100, util_pivots), `${fmtBytes(sys['memory']['used'])}/${fmtBytes(sys['memory']['total'])}`);
 	}
 	(sys['disks'] || []).forEach((disk, i)=>{
-		const ratio = disk['total'] ? disk['used'] / disk['total'] : 0;
-		$(`#diskfill${name}_${i}`).css({ 'width': `${(ratio * 100).toFixed(1)}%`, 'background': ColorByValue(ratio, ratio_pivots, colors) });
-		$(`#disktext${name}_${i}`).text(`${fmtBytes(disk['used'])} / ${fmtBytes(disk['total'])}`);
+		const r = disk['total'] ? disk['used'] / disk['total'] : 0;
+		setMeter(`disk${name}_${i}`, r * 100, colorFor(r * 100, util_pivots), '');
+		$(`#disk-text${name}_${i}`).text(`${fmtBytes(disk['used'])}/${fmtBytes(disk['total'])}`);
 	});
 
-	for(const gpu of state['gpus']){
-		updateGPU(name, gpu);
-	}
+	for(const gpu of state['gpus']) updateGpu(name, gpu);
 }
 
 function refresh(){
@@ -196,15 +164,14 @@ function refresh(){
 		const sig = signature(states);
 		if(sig !== lastSignature){
 			lastSignature = sig;
-			$('#dashboard').html(Object.values(states).map(buildServerCard).join(''));
+			$('#dashboard').html(Object.values(states).map(buildCard).join(''));
 		}
-		for(const state of Object.values(states)){
-			updateServer(state);
-		}
+		for(const state of Object.values(states)) updateCard(state);
 	});
 }
 
-$(document).ready(function(){
+$(function(){
+	$('#brand-mark').html(window.ICONS.signal);
 	refresh();
 	setInterval(refresh, 1000);
 });

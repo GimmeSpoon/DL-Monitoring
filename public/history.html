@@ -1,20 +1,18 @@
 <html lang="en">
   <head>
-    <title>MLLAB Monitoring - History</title>
+    <title>MLLAB Monitor — History</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width">
-    <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.6.3.js" integrity="sha256-nQLuAZGRRcILA+6dMBOvcRh5Pe310sBpanc6+QBmyVM=" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="index.css">
+    <script src="vendor/jquery-3.6.3.min.js"></script>
+    <script src="vendor/chart.umd.min.js"></script>
+    <script src="vendor/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="common.js"></script>
     <script>
-      // categorical palettes validated (dataviz six checks) against the
-      // matching --chartSurface: light #E1FFFF, dark #000000
+      // categorical palettes (dataviz six-checks) for the chart surfaces
       const PALETTES = {
-        light: ['#2a78d6', '#008300', '#d55181', '#b07500', '#199e70', '#d95926', '#4a3aa7', '#e34948'],
-        dark: ['#3987e5', '#008300', '#d55181', '#c98500', '#199e70', '#d95926', '#9085e9', '#e66767'],
+        light: ['#0e9bb8', '#008300', '#d55181', '#b07500', '#199e70', '#d95926', '#4a3aa7', '#e34948'],
+        dark: ['#22d3ee', '#3fb950', '#d55181', '#c98500', '#199e70', '#d95926', '#9085e9', '#e66767'],
       };
       const RANGES = { '1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800, '30d': 2592000 };
       const GiB = 1024 ** 3;
@@ -25,39 +23,33 @@
 
       const pal = ()=>PALETTES[document.documentElement.getAttribute('color-theme') === 'dark' ? 'dark' : 'light'];
       const ink = ()=>getComputedStyle(document.documentElement).getPropertyValue('--color').trim() || '#888';
+      const grid = ()=>'rgba(128,128,128,0.16)';
 
       function mkChart(id, opts, series){
         if(charts[id]) charts[id].destroy();
         const p = pal();
         Chart.defaults.color = ink();
-        Chart.defaults.font.family = "'NanumSquare', sans-serif";
+        Chart.defaults.font.family = "ui-monospace, Menlo, Consolas, monospace";
         charts[id] = new Chart(document.getElementById(id), {
           type: 'line',
           data: {
             datasets: series.map((s)=>({
-              label: s.label,
-              data: s.data,
-              borderColor: p[s.slot % p.length],
-              backgroundColor: p[s.slot % p.length],
+              label: s.label, data: s.data,
+              borderColor: p[s.slot % p.length], backgroundColor: p[s.slot % p.length],
               borderDash: s.dashed ? [5, 4] : undefined,
-              borderWidth: 2,
-              pointRadius: 0,
-              pointHoverRadius: 4,
-              tension: 0.15,
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.15,
             })),
           },
           options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
+            responsive: true, maintainAspectRatio: false, animation: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-              legend: { display: series.length > 1, labels: { font: { size: 11 }, boxWidth: 18, boxHeight: 3 } },
+              legend: { display: series.length > 1, labels: { font: { size: 11 }, boxWidth: 16, boxHeight: 3, usePointStyle: true } },
               tooltip: { callbacks: { label: (c)=>` ${c.dataset.label}: ${Math.round(c.parsed.y * 10) / 10}${opts.unit || ''}` } },
             },
             scales: {
-              x: { type: 'time', ticks: { font: { size: 10 }, maxRotation: 0, autoSkipPadding: 16 }, grid: { color: 'rgba(128,128,128,0.18)' } },
-              y: { beginAtZero: true, max: opts.max, suggestedMax: opts.suggestedMax, ticks: { font: { size: 10 }, callback: (v)=>`${Math.round(v * 10) / 10}${opts.unit || ''}` }, grid: { color: 'rgba(128,128,128,0.18)' } },
+              x: { type: 'time', ticks: { font: { size: 10 }, maxRotation: 0, autoSkipPadding: 16 }, grid: { color: grid() } },
+              y: { beginAtZero: true, max: opts.max, suggestedMax: opts.suggestedMax, ticks: { font: { size: 10 }, callback: (v)=>`${Math.round(v * 10) / 10}${opts.unit || ''}` }, grid: { color: grid() } },
             },
           },
         });
@@ -66,31 +58,25 @@
       function render(data){
         const t = (ts)=>ts * 1000;
         const sys = data.system || [];
-
         mkChart('chart-cpu', { unit: '%', max: 100 }, [
           { label: 'avg', slot: 0, data: sys.map((r)=>({ x: t(r.ts), y: r.cpu })) },
           { label: 'max', slot: 0, dashed: true, data: sys.map((r)=>({ x: t(r.ts), y: r.cpu_max })) },
         ]);
-
         const memTotal = sys.length ? sys[sys.length - 1].mem_total / GiB : undefined;
         mkChart('chart-ram', { unit: 'G', suggestedMax: memTotal }, [
           { label: 'used', slot: 1, data: sys.map((r)=>({ x: t(r.ts), y: r.mem_used / GiB })) },
         ]);
-
         const gpuIdxs = Object.keys(data.gpus || {}).sort((a, b)=>a - b);
         const gpuSeries = (field, div = 1)=>gpuIdxs.map((idx)=>({
-          label: `GPU ${idx}`,
-          slot: Number(idx), // color follows the GPU, not its position
+          label: `GPU ${idx}`, slot: Number(idx),
           data: data.gpus[idx].map((r)=>({ x: t(r.ts), y: r[field] / div })),
         }));
         mkChart('chart-gpu-util', { unit: '%', max: 100 }, gpuSeries('util'));
-        mkChart('chart-gpu-mem', { unit: 'G' }, gpuSeries('mem_used', 1024)); // MiB -> GiB
+        mkChart('chart-gpu-mem', { unit: 'G' }, gpuSeries('mem_used', 1024));
         mkChart('chart-gpu-temp', { unit: '°C' }, gpuSeries('temp'));
-
         const mounts = Object.keys(data.disks || {}).sort();
         mkChart('chart-disk', { unit: '%', max: 100 }, mounts.map((mount, i)=>({
-          label: mount,
-          slot: i,
+          label: mount, slot: i,
           data: data.disks[mount].map((r)=>({ x: t(r.ts), y: r.total ? r.used / r.total * 100 : 0 })),
         })));
       }
@@ -103,15 +89,12 @@
       }
 
       $(function(){
-        populateServers($('#server-select'), (servers)=>{
-          if(servers.length){ state.server = servers[0].name; load(); }
-        });
+        $('#brand-mark').html(window.ICONS.signal);
+        populateServers($('#server-select'), (servers)=>{ if(servers.length){ state.server = servers[0].name; load(); } });
         $('#server-select').on('change', function(){ state.server = this.value; load(); });
         $('.range-btn').on('click', function(){
-          $('.range-btn').removeClass('active');
-          $(this).addClass('active');
-          state.range = $(this).data('range');
-          load();
+          $('.range-btn').removeClass('active'); $(this).addClass('active');
+          state.range = $(this).data('range'); load();
         });
         $(document).on('themechange', ()=>{ if(lastData) render(lastData); });
         setInterval(load, 60000);
@@ -119,18 +102,18 @@
     </script>
   </head>
   <body>
-    <div id="header">
-      <label>
-        <input id="skin" role="switch" type="checkbox" />
-        <span class="selector themed-t" id="toggle-text">다크모드</span>
-      </label>
-      <nav id="nav"></nav>
-    </div>
+    <header class="topbar">
+      <a class="brand" href="/"><span id="brand-mark"></span> MLLAB <span>Monitor</span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="topbar-right">
+        <button id="skin" class="icon-btn" type="button" aria-label="Toggle theme"></button>
+        <a href="#" id="logout" class="logout">Logout</a>
+      </div>
+    </header>
 
     <div class="controls">
-      <span>SERVER</span>
-      <select id="server-select"></select>
-      <span>RANGE</span>
+      <label>Server <select id="server-select"></select></label>
+      <span>Range</span>
       <button class="range-btn" data-range="1h">1h</button>
       <button class="range-btn active" data-range="6h">6h</button>
       <button class="range-btn" data-range="24h">24h</button>
@@ -140,11 +123,11 @@
 
     <div class="charts-grid">
       <div class="chart-card"><h3>CPU</h3><div class="chart-wrap"><canvas id="chart-cpu"></canvas></div></div>
-      <div class="chart-card"><h3>RAM USED</h3><div class="chart-wrap"><canvas id="chart-ram"></canvas></div></div>
-      <div class="chart-card"><h3>GPU UTILIZATION</h3><div class="chart-wrap"><canvas id="chart-gpu-util"></canvas></div></div>
-      <div class="chart-card"><h3>GPU MEMORY</h3><div class="chart-wrap"><canvas id="chart-gpu-mem"></canvas></div></div>
-      <div class="chart-card"><h3>GPU TEMPERATURE</h3><div class="chart-wrap"><canvas id="chart-gpu-temp"></canvas></div></div>
-      <div class="chart-card"><h3>DISK USAGE</h3><div class="chart-wrap"><canvas id="chart-disk"></canvas></div></div>
+      <div class="chart-card"><h3>RAM used</h3><div class="chart-wrap"><canvas id="chart-ram"></canvas></div></div>
+      <div class="chart-card"><h3>GPU utilization</h3><div class="chart-wrap"><canvas id="chart-gpu-util"></canvas></div></div>
+      <div class="chart-card"><h3>GPU memory</h3><div class="chart-wrap"><canvas id="chart-gpu-mem"></canvas></div></div>
+      <div class="chart-card"><h3>GPU temperature</h3><div class="chart-wrap"><canvas id="chart-gpu-temp"></canvas></div></div>
+      <div class="chart-card"><h3>Disk usage</h3><div class="chart-wrap"><canvas id="chart-disk"></canvas></div></div>
     </div>
   </body>
 </html>

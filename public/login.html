@@ -1,14 +1,14 @@
 <html lang="en">
   <head>
-    <title>MLLAB Monitoring - Login</title>
+    <title>MLLAB Monitor — Sign in</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width">
-    <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.6.3.js" integrity="sha256-nQLuAZGRRcILA+6dMBOvcRh5Pe310sBpanc6+QBmyVM=" crossorigin="anonymous"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="index.css">
+    <script src="vendor/jquery-3.6.3.min.js"></script>
     <script src="common.js"></script>
     <script>
       $(function(){
+        $('#brand-mark').html(window.ICONS.signal);
         $('#login-form').on('submit', (evnt)=>{
           evnt.preventDefault();
           $.ajax({
@@ -25,18 +25,18 @@
     </script>
   </head>
   <body>
-    <div id="header">
-      <label>
-        <input id="skin" role="switch" type="checkbox" />
-        <span class="selector themed-t" id="toggle-text">다크모드</span>
-      </label>
-    </div>
+    <header class="topbar">
+      <span class="brand"><span id="brand-mark"></span> MLLAB <span>Monitor</span></span>
+      <div class="topbar-right">
+        <button id="skin" class="icon-btn" type="button" aria-label="Toggle theme"></button>
+      </div>
+    </header>
+
     <div class="login-wrap">
-      <form class="login-card themed" id="login-form">
-        <div class="sb">MLLAB Monitoring</div>
+      <form class="login-card" id="login-form">
         <div class="login-error" id="login-error"></div>
-        <input type="password" id="pw" placeholder="password" autocomplete="current-password">
-        <button type="submit" class="login-button">LOGIN</button>
+        <input type="password" id="pw" placeholder="Password" autocomplete="current-password">
+        <button type="submit" class="login-button">Sign in</button>
       </form>
     </div>
   </body>
