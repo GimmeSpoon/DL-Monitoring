@@ -6,7 +6,7 @@ window.ICONS = {
 	sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
 	moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
 	user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
-	fan: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c0-3 .5-6 2.5-6S18 8 16 11c2-1 5-.5 5 1.5S17 15 14 13c1 2 .5 5-1.5 5S10 15 12 12c-2 2-5 1.5-5-.5S9 9 12 11c-1-2-2.5-2-2.5-4S11 3 12 6"/><circle cx="12" cy="12" r="1.6" fill="var(--raised)"/></svg>',
+	fan: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12C10.8 7.5 12.2 3.2 15.4 3 15.9 6.2 14.3 9.6 12 12Z"/><path d="M12 12C16.5 10.8 20.8 12.2 21 15.4 17.8 15.9 14.4 14.3 12 12Z"/><path d="M12 12C13.2 16.5 11.8 20.8 8.6 21 8.1 17.8 9.7 14.4 12 12Z"/><path d="M12 12C7.5 13.2 3.2 11.8 3 8.6 6.2 8.1 9.6 9.7 12 12Z"/><circle cx="12" cy="12" r="2.3" fill="var(--raised)"/><circle cx="12" cy="12" r="1.15"/></svg>',
 };
 
 function applyTheme(theme){
