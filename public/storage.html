@@ -68,8 +68,18 @@
         $.getJSON('/api/storage', { server }).done(render);
       }
 
+      // manual reload: filesystem sizes are live (1s poll), so a re-fetch is instant
+      // and fresh; per-account usage still reflects the last periodic scan
+      function refresh(){
+        const $b = $('#refresh'), server = $('#server-select').val();
+        if(!server || $b.prop('disabled')) return;
+        $b.addClass('spin').prop('disabled', true);
+        $.getJSON('/api/storage', { server }).done(render).always(()=>$b.removeClass('spin').prop('disabled', false));
+      }
+
       $(function(){
         $('#brand-mark').html(window.ICONS.signal);
+        $('#refresh').html(window.ICONS.refresh + 'Refresh').on('click', refresh);
         const want = new URLSearchParams(window.location.search).get('server');
         populateServers($('#server-select'), (servers)=>{
           const sel = (want && servers.some((s)=>s.name === want)) ? want : (servers[0] && servers[0].name);
@@ -92,6 +102,7 @@
 
     <div class="controls">
       <label>Server <select id="server-select"></select></label>
+      <button id="refresh" class="range-btn" type="button" title="Reload storage now"></button>
     </div>
 
     <div class="storage-wrap">
