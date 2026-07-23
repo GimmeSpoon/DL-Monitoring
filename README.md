@@ -188,8 +188,9 @@ HOST=127.0.0.1 PORT=8080 npm start
   a connection without naming each one, add a discovery entry
   `{ "type": "containers", "connection": "<conn>", "group": "<label>" }` — it runs
   `docker ps -a` each cycle and shows one row per container (running → up, stopped
-  → down, health in the detail), along with the image, published ports, and launch
-  command (hover the name), adding/removing rows as containers come and go
+  → down, health in the detail), along with the image, published ports, mount
+  sources (volume names / host paths), and launch command, adding/removing rows
+  as containers come and go
   (optional `"engine": "podman"` and `"sudo": true`). Modifiers on any service:
   `"sudo": true` (prefix the probe with `sudo -n`), `"container": "<name>"` (run a
   `command`/`port`/`http` probe *inside* that container via `docker exec`), and

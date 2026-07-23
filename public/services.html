@@ -45,15 +45,16 @@
           const rows = list.map((s)=>{
             const cls = STAT[s.status] || 'type-unknown';
             const m = s.meta || {};
-            const nameTitle = m.command ? ` title="${esc(m.command)}"` : '';
             return `<div class="svc-row">
               <span class="event-type ${cls}">${esc(s.status)}</span>
               <span class="svc-main">
-                <span class="svc-name"${nameTitle}>${esc(s.name)}</span>
+                <span class="svc-name">${esc(s.name)}</span>
                 <span class="event-type svc-type">${esc(s.type)}</span>
                 <span class="svc-detail">${esc(s.detail || '')}</span>
                 ${m.image ? `<span class="svc-img">${esc(m.image)}</span>` : ''}
                 ${m.ports ? `<span class="svc-ports">${esc(m.ports)}</span>` : ''}
+                ${m.mounts ? `<span class="svc-mounts" title="mounted from: ${esc(m.mounts)}">${esc(m.mounts)}</span>` : ''}
+                ${m.command ? `<span class="svc-cmd" title="${esc(m.command)}">${esc(m.command)}</span>` : ''}
               </span>
               <span class="svc-when">${s.checked_at ? 'checked ' + fmtTime(s.checked_at) : 'pending'}</span>
             </div>`;

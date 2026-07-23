@@ -760,6 +760,8 @@ body {
 .svc-detail { color: var(--text-mute); font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
 .svc-img { color: var(--text-dim); font-family: var(--mono); font-size: 11px; }
 .svc-ports { color: var(--text-dim); font-family: var(--mono); font-size: 11px; }
+.svc-mounts, .svc-cmd { color: var(--text-mute); font-family: var(--mono); font-size: 11px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-cmd::before { content: '$ '; color: var(--text-dim); }
 .svc-when { font-family: var(--mono); font-size: 11px; color: var(--text-mute); white-space: nowrap; }
 
 /* ---------- login ---------- */
