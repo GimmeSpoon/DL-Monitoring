@@ -7,13 +7,10 @@ const { createSessionTracker } = require('./lib/sessions');
 const { createAggregator } = require('./lib/aggregator');
 const { createCollector } = require('./lib/collector');
 const { createStorageScanner } = require('./lib/storage');
-const { createMock } = require('./lib/mock');
 const { createRoutes } = require('./lib/routes');
 const pkg = require('./package.json');
 
-// usage: npm start            (SSH auth via ssh-agent or a key file)
-//        npm start -- --mock  (synthetic data, no SSH)
-const mockMode = process.argv.slice(2).includes('--mock');
+// usage: npm start   (SSH auth via ssh-agent or a key file)
 
 function log(msg){
 	console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -32,51 +29,39 @@ if(!appConfig.webPasswordHash){
 	process.exit(1);
 }
 
-let collector;
-let monitorControl;  // what /kill /revive act on (mock or real collector)
-let serverList = []; // real server configs (empty in --mock)
-
 const onIngest = (name, state, apps)=>{
 	aggregator.add(name, state);
 	sessions.observe(name, apps);
 };
 
-if(mockMode){
-	collector = createCollector({ servers: [], agentSock: null, defaultKey: null, pollIntervalMs: config.pollIntervalMs, reconnectDelayMs: config.reconnectDelayMs, onEvent, onIngest });
-	monitorControl = createMock(collector, { onEvent });
-	log('running in --mock mode (synthetic data, no SSH)');
+const serverList = loadServerList();
+const agentSock = process.env.SSH_AUTH_SOCK || null;
+const defaultKey = appConfig.sshPrivateKey || process.env.SSH_PRIVATE_KEY || null;
+// only remote (non-local) servers need SSH auth; a per-server key covers its own entry
+const remoteNeedingAuth = serverList.filter((s)=>!s.local && !s.privateKey);
+if(remoteNeedingAuth.length && !agentSock && !defaultKey){
+	console.error([
+		`No SSH authentication for remote servers (${remoteNeedingAuth.map((s)=>s.name).join(', ')}). Pick one:`,
+		'  ssh-agent:  eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519   (re-run after every reboot)',
+		'  key file:   export SSH_PRIVATE_KEY=~/.ssh/id_ed25519              (survives reboot; best for a service)',
+		'              or set "sshPrivateKey" in config.json, or "privateKey" per server in servers.json',
+		'  local box:  add "local": true to a server entry to skip SSH for the machine this runs on',
+	].join('\n'));
+	process.exit(1);
 }
-else{
-	const servers = loadServerList();
-	serverList = servers;
-	const agentSock = process.env.SSH_AUTH_SOCK || null;
-	const defaultKey = appConfig.sshPrivateKey || process.env.SSH_PRIVATE_KEY || null;
-	// only remote (non-local) servers need SSH auth; a per-server key covers its own entry
-	const remoteNeedingAuth = servers.filter((s)=>!s.local && !s.privateKey);
-	if(remoteNeedingAuth.length && !agentSock && !defaultKey){
-		console.error([
-			`No SSH authentication for remote servers (${remoteNeedingAuth.map((s)=>s.name).join(', ')}). Pick one:`,
-			'  ssh-agent:  eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519   (re-run after every reboot)',
-			'  key file:   export SSH_PRIVATE_KEY=~/.ssh/id_ed25519              (survives reboot; best for a service)',
-			'              or set "sshPrivateKey" in config.json, or "privateKey" per server in servers.json',
-			'  local box:  add "local": true to a server entry to skip SSH for the machine this runs on',
-		].join('\n'));
-		process.exit(1);
-	}
-	collector = createCollector({
-		servers: servers,
-		agentSock: agentSock,
-		defaultKey: defaultKey,
-		pollIntervalMs: config.pollIntervalMs,
-		reconnectDelayMs: config.reconnectDelayMs,
-		onEvent: onEvent,
-		onIngest: onIngest,
-	});
-	monitorControl = collector;
-}
+const collector = createCollector({
+	servers: serverList,
+	agentSock: agentSock,
+	defaultKey: defaultKey,
+	pollIntervalMs: config.pollIntervalMs,
+	reconnectDelayMs: config.reconnectDelayMs,
+	onEvent: onEvent,
+	onIngest: onIngest,
+});
+const monitorControl = collector; // /api/collector stop|start act on this
 
 monitorControl.start();
-onEvent('server_start', null, `v${pkg.version} started${mockMode ? ' (mock)' : ''}`);
+onEvent('server_start', null, `v${pkg.version} started`);
 
 // per-account storage: slow scanner (default every 6h), separate from the poll
 const storage = createStorageScanner({
@@ -88,8 +73,7 @@ const storage = createStorageScanner({
 	sudo: !!appConfig.storageScanSudo,
 	intervalMs: appConfig.storageScanHours ? appConfig.storageScanHours * 3600 * 1000 : config.storageScanIntervalMs,
 	timeoutMs: config.storageScanTimeoutMs,
-	firstDelayMs: mockMode ? 2000 : 20000,
-	mock: mockMode,
+	firstDelayMs: 20000,
 });
 storage.start();
 

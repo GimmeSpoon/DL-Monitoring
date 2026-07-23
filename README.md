@@ -119,19 +119,12 @@ npm start
 
 Open `http://<monitoring-server>:51234`, log in, done.
 
-## Mock mode (development without GPU servers)
+## Development without GPU servers
 
-```bash
-npm run set-web-password -- test
-npm start -- --mock
-```
-
-Serves two synthetic servers with wandering utilization, user churn, and
-occasional connection drops — enough to exercise the dashboard, history,
-and logs end to end. To test real collection without a GPU box, add your
-own machine to `servers.json` (`"addr": "127.0.0.1"`, with a local
-`openssh-server` and your key in `~/.ssh/authorized_keys`); you get
-CPU/RAM/disk and an empty GPU list.
+To test real collection without a GPU box, add your own machine to
+`servers.json` (`"addr": "127.0.0.1"`, with a local `openssh-server` and your
+key in `~/.ssh/authorized_keys`), or mark the entry `"local": true` to skip SSH
+entirely; you get CPU/RAM/disk/network and an empty GPU list.
 
 ## Configuration
 
