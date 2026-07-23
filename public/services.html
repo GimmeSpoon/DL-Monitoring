@@ -44,12 +44,16 @@
           const up = list.filter((s)=>s.status === 'up').length;
           const rows = list.map((s)=>{
             const cls = STAT[s.status] || 'type-unknown';
+            const m = s.meta || {};
+            const nameTitle = m.command ? ` title="${esc(m.command)}"` : '';
             return `<div class="svc-row">
               <span class="event-type ${cls}">${esc(s.status)}</span>
               <span class="svc-main">
-                <span class="svc-name">${esc(s.name)}</span>
+                <span class="svc-name"${nameTitle}>${esc(s.name)}</span>
                 <span class="event-type svc-type">${esc(s.type)}</span>
                 <span class="svc-detail">${esc(s.detail || '')}</span>
+                ${m.image ? `<span class="svc-img">${esc(m.image)}</span>` : ''}
+                ${m.ports ? `<span class="svc-ports">${esc(m.ports)}</span>` : ''}
               </span>
               <span class="svc-when">${s.checked_at ? 'checked ' + fmtTime(s.checked_at) : 'pending'}</span>
             </div>`;
