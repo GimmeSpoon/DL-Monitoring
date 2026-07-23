@@ -747,21 +747,22 @@ body {
 	display: grid;
 	grid-template-columns: auto 1fr auto;
 	gap: 12px;
-	align-items: center;
+	align-items: start;
 	padding: 8px 2px;
 	border-bottom: 1px solid var(--border-soft);
 }
 
 .svc-row:last-child { border-bottom: 0; }
 .svc-row .event-type:first-child { min-width: 58px; text-align: center; text-transform: uppercase; }
-.svc-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.svc-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.svc-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .svc-name { font-weight: 600; color: var(--text); }
 .svc-type { color: var(--text-mute); }
 .svc-detail { color: var(--text-mute); font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
-.svc-img { color: var(--text-dim); font-family: var(--mono); font-size: 11px; }
-.svc-ports { color: var(--text-dim); font-family: var(--mono); font-size: 11px; }
-.svc-mounts, .svc-cmd { color: var(--text-mute); font-family: var(--mono); font-size: 11px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.svc-cmd::before { content: '$ '; color: var(--text-dim); }
+/* container metadata: a compact label/value grid under the name, one field per row */
+.svc-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 10px; row-gap: 1px; margin-top: 1px; }
+.svc-meta .mk { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-mute); padding-top: 1px; }
+.svc-meta .mv { font-family: var(--mono); font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .svc-when { font-family: var(--mono); font-size: 11px; color: var(--text-mute); white-space: nowrap; }
 
 /* ---------- login ---------- */
