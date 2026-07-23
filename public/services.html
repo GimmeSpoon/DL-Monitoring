@@ -60,8 +60,20 @@
 
       function load(){ $.getJSON('/api/services').done((d)=>render(d.services || [])); }
 
+      // force an immediate backend re-check (the poller is otherwise ~20s), spin
+      // the icon and lock the button until the fresh statuses come back
+      function recheck(){
+        const $b = $('#refresh');
+        if($b.prop('disabled')) return;
+        $b.addClass('spin').prop('disabled', true);
+        $.post('/api/services/check')
+          .done((d)=>render(d.services || []))
+          .always(()=>$b.removeClass('spin').prop('disabled', false));
+      }
+
       $(function(){
         $('#brand-mark').html(window.ICONS.signal);
+        $('#refresh').html(window.ICONS.refresh + 'Refresh').on('click', recheck);
         $('#group-select').on('change', load);
         load();
         setInterval(load, 10000);
@@ -80,6 +92,7 @@
 
     <div class="controls" id="controls">
       <label>Group <select id="group-select"></select></label>
+      <button id="refresh" class="range-btn" type="button" title="Re-check all services now"></button>
     </div>
 
     <div class="storage-wrap" id="svc-wrap"></div>

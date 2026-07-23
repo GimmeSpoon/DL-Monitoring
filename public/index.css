@@ -529,6 +529,12 @@ body {
 .range-btn:hover { color: var(--text); }
 .range-btn.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
+/* services "Refresh" button: icon + label, spins while re-checking */
+#refresh { display: inline-flex; align-items: center; gap: 6px; }
+#refresh svg { width: 13px; height: 13px; }
+#refresh:disabled { opacity: 0.6; cursor: default; }
+#refresh.spin svg { animation: spin 0.8s linear infinite; }
+
 /* ---------- history charts ---------- */
 
 .charts-grid {
@@ -809,7 +815,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
 	.meter-fill, .card { transition: none; }
-	.fan-ico { animation: none; }
+	.fan-ico, #refresh.spin svg { animation: none; }
 }
 
 @media (max-width: 560px) {
