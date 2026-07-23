@@ -184,7 +184,12 @@ HOST=127.0.0.1 PORT=8080 npm start
 
   Each service has a `type` (`container` / `tmux` / `supervisor` / `systemd` /
   `port` / `http` / `command`) plus its fields, a `connection` (name ref), and an
-  optional `group` label used only for UI grouping. Modifiers on any service:
+  optional `group` label used only for UI grouping. To list **every** container on
+  a connection without naming each one, add a discovery entry
+  `{ "type": "containers", "connection": "<conn>", "group": "<label>" }` — it runs
+  `docker ps -a` each cycle and shows one row per container (running → up, stopped
+  → down, health in the detail), adding/removing rows as containers come and go
+  (optional `"engine": "podman"` and `"sudo": true`). Modifiers on any service:
   `"sudo": true` (prefix the probe with `sudo -n`), `"container": "<name>"` (run a
   `command`/`port`/`http` probe *inside* that container via `docker exec`), and
   `"user": "<u>"` for a tmux session owner. Checks run every 20s (override with

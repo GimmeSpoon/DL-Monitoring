@@ -5,6 +5,7 @@
     "local": { "local": true }
   },
   "services": [
+    { "group": "gpu-1", "connection": "gpu-1-host", "type": "containers" },
     { "name": "Inference API", "group": "gpu-1", "connection": "gpu-1-host", "type": "container", "container": "infer-api" },
     { "name": "Model server", "group": "gpu-1", "connection": "infer-box", "type": "port", "port": 8000 },
     { "name": "Celery worker", "group": "gpu-1", "connection": "gpu-1-host", "type": "supervisor", "program": "celery" },
