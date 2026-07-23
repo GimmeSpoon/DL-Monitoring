@@ -4,6 +4,7 @@ old/
 !package.json
 !package-lock.json
 !servers.example.json
+!services.example.json
 *.txt
 *.ico
 data/

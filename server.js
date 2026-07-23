@@ -1,5 +1,5 @@
 const express = require('express');
-const { config, loadServerList, loadAppConfig } = require('./lib/config');
+const { config, loadServerList, loadServiceList, loadAppConfig } = require('./lib/config');
 const { createAuth } = require('./lib/auth');
 const { openDb } = require('./lib/db');
 const { createEvents } = require('./lib/events');
@@ -7,6 +7,8 @@ const { createSessionTracker } = require('./lib/sessions');
 const { createAggregator } = require('./lib/aggregator');
 const { createCollector } = require('./lib/collector');
 const { createStorageScanner } = require('./lib/storage');
+const { createSshPool } = require('./lib/ssh-pool');
+const { createServiceChecker } = require('./lib/services');
 const { createRoutes } = require('./lib/routes');
 const pkg = require('./package.json');
 
@@ -77,6 +79,20 @@ const storage = createStorageScanner({
 });
 storage.start();
 
+// services: independent up/down checks over their own SSH pool (separate config,
+// separate connections). Dormant when services.json is absent.
+const serviceConfig = loadServiceList();
+const servicePool = createSshPool({ conns: serviceConfig.connections, agentSock, defaultKey });
+const serviceChecker = createServiceChecker({
+	services: serviceConfig.services,
+	pool: servicePool,
+	onEvent,
+	intervalMs: appConfig.serviceCheckSeconds ? appConfig.serviceCheckSeconds * 1000 : config.serviceCheckIntervalMs,
+	timeoutMs: config.serviceCheckTimeoutMs,
+	firstDelayMs: 8000,
+});
+serviceChecker.start();
+
 setInterval(()=>{
 	aggregator.flush();
 	sessions.flush();
@@ -97,7 +113,7 @@ app.use(auth.sessionMiddleware);
 app.post('/api/login', auth.login);
 app.post('/api/logout', auth.logout);
 app.use(auth.gate);
-app.use(createRoutes({ collector, monitorControl, db, onEvent }));
+app.use(createRoutes({ collector, monitorControl, db, onEvent, serviceChecker }));
 app.use(express.static(config.publicDir));
 
 // listen host/port: env (PORT/HOST) wins, then config.json, then the defaults

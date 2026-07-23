@@ -1,0 +1,87 @@
+<html lang="en">
+  <head>
+    <title>Server Monitor — Services</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="index.css">
+    <script src="vendor/jquery-3.6.3.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+      const esc = (x)=>$('<i>').text(x == null ? '' : x).html();
+      const fmtTime = (ts)=>ts ? new Date(ts * 1000).toLocaleString() : '';
+      const STAT = { up: 'type-ok', down: 'type-bad', unknown: 'type-unknown' };
+
+      // keep the group <select> in sync with the current group set (preserve selection)
+      function syncFilter(groups){
+        const sig = groups.join('|');
+        if($('#group-select').data('sig') === sig) return;
+        const cur = $('#group-select').val();
+        $('#group-select')
+          .html('<option value="">all groups</option>' + groups.map((g)=>`<option value="${esc(g)}">${esc(g)}</option>`).join(''))
+          .data('sig', sig);
+        if(cur && groups.includes(cur)) $('#group-select').val(cur);
+      }
+
+      function render(services){
+        const $wrap = $('#svc-wrap');
+        if(!services.length){
+          $('#controls').hide();
+          $wrap.html('<div class="storage-note">No services configured. Add a <code>services.json</code> (see <code>services.example.json</code>) and restart.</div>');
+          return;
+        }
+        $('#controls').show();
+
+        const groups = [...new Set(services.map((s)=>s.group || 'ungrouped'))];
+        syncFilter(groups);
+
+        const pick = $('#group-select').val();
+        const shown = pick ? services.filter((s)=>(s.group || 'ungrouped') === pick) : services;
+
+        const byGroup = {};
+        for(const s of shown) (byGroup[s.group || 'ungrouped'] = byGroup[s.group || 'ungrouped'] || []).push(s);
+
+        $wrap.html(Object.entries(byGroup).map(([g, list])=>{
+          const up = list.filter((s)=>s.status === 'up').length;
+          const rows = list.map((s)=>{
+            const cls = STAT[s.status] || 'type-unknown';
+            return `<div class="svc-row">
+              <span class="event-type ${cls}">${esc(s.status)}</span>
+              <span class="svc-main">
+                <span class="svc-name">${esc(s.name)}</span>
+                <span class="event-type svc-type">${esc(s.type)}</span>
+                <span class="svc-detail">${esc(s.detail || '')}</span>
+              </span>
+              <span class="svc-when">${s.checked_at ? 'checked ' + fmtTime(s.checked_at) : 'pending'}</span>
+            </div>`;
+          }).join('');
+          return `<section class="panel"><h3>${esc(g)} <span>${up}/${list.length} up</span></h3>${rows}</section>`;
+        }).join(''));
+      }
+
+      function load(){ $.getJSON('/api/services').done((d)=>render(d.services || [])); }
+
+      $(function(){
+        $('#brand-mark').html(window.ICONS.signal);
+        $('#group-select').on('change', load);
+        load();
+        setInterval(load, 10000);
+      });
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/"><span id="brand-mark"></span> Server <span>Monitor</span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="topbar-right">
+        <button id="skin" class="icon-btn" type="button" aria-label="Toggle theme"></button>
+        <a href="#" id="logout" class="logout">Logout</a>
+      </div>
+    </header>
+
+    <div class="controls" id="controls">
+      <label>Group <select id="group-select"></select></label>
+    </div>
+
+    <div class="storage-wrap" id="svc-wrap"></div>
+  </body>
+</html>

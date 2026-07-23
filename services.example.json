@@ -1,0 +1,16 @@
+{
+  "connections": {
+    "gpu-1-host": { "addr": "10.0.0.2", "port": 22, "username": "hostadmin", "privateKey": "~/.ssh/host_key" },
+    "infer-box": { "addr": "10.0.0.50", "port": 22, "username": "root" },
+    "local": { "local": true }
+  },
+  "services": [
+    { "name": "Inference API", "group": "gpu-1", "connection": "gpu-1-host", "type": "container", "container": "infer-api" },
+    { "name": "Model server", "group": "gpu-1", "connection": "infer-box", "type": "port", "port": 8000 },
+    { "name": "Celery worker", "group": "gpu-1", "connection": "gpu-1-host", "type": "supervisor", "program": "celery" },
+    { "name": "Training run", "group": "gpu-1", "connection": "gpu-1-host", "type": "tmux", "session": "train", "user": "alice" },
+    { "name": "Nginx", "group": "edge", "connection": "local", "type": "systemd", "unit": "nginx" },
+    { "name": "Grafana", "group": "edge", "connection": "local", "type": "http", "url": "http://127.0.0.1:3000/api/health" },
+    { "name": "App daemon", "group": "edge", "connection": "gpu-1-host", "type": "command", "command": "pgrep -f my_daemon", "container": "app" }
+  ]
+}

@@ -7,9 +7,9 @@
     <script src="vendor/jquery-3.6.3.min.js"></script>
     <script src="common.js"></script>
     <script>
-      const EVENT_TYPES = ['ssh_connect', 'ssh_disconnect', 'ssh_fail', 'login_ok', 'login_fail', 'kill', 'revive', 'collector_error', 'server_start', 'storage_scan', 'storage_fail'];
-      const BAD_TYPES = new Set(['ssh_disconnect', 'ssh_fail', 'login_fail', 'collector_error', 'kill', 'storage_fail']);
-      const OK_TYPES = new Set(['ssh_connect', 'login_ok', 'revive', 'server_start', 'storage_scan']);
+      const EVENT_TYPES = ['ssh_connect', 'ssh_disconnect', 'ssh_fail', 'login_ok', 'login_fail', 'kill', 'revive', 'collector_error', 'server_start', 'storage_scan', 'storage_fail', 'service_up', 'service_down', 'service_fail'];
+      const BAD_TYPES = new Set(['ssh_disconnect', 'ssh_fail', 'login_fail', 'collector_error', 'kill', 'storage_fail', 'service_down', 'service_fail']);
+      const OK_TYPES = new Set(['ssh_connect', 'login_ok', 'revive', 'server_start', 'storage_scan', 'service_up']);
       const PAGE = { events: 100, usage: 50 };
 
       const fmtTime = (ts)=>ts ? new Date(ts * 1000).toLocaleString() : '';

@@ -660,6 +660,7 @@ body {
 
 .event-type.type-bad { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 55%, transparent); }
 .event-type.type-ok { color: var(--online); border-color: color-mix(in srgb, var(--online) 55%, transparent); }
+.event-type.type-unknown { color: var(--text-mute); border-color: var(--border); }
 
 .pager {
 	display: flex;
@@ -762,6 +763,25 @@ body {
 .acct-val em { font-style: normal; color: var(--text-mute); margin-left: 4px; }
 
 .storage-note { color: var(--text-mute); font-size: 12.5px; padding: 6px 2px; }
+
+/* ---------- services page ---------- */
+
+.svc-row {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 12px;
+	align-items: center;
+	padding: 8px 2px;
+	border-bottom: 1px solid var(--border-soft);
+}
+
+.svc-row:last-child { border-bottom: 0; }
+.svc-row .event-type:first-child { min-width: 58px; text-align: center; text-transform: uppercase; }
+.svc-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.svc-name { font-weight: 600; color: var(--text); }
+.svc-type { color: var(--text-mute); }
+.svc-detail { color: var(--text-mute); font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.svc-when { font-family: var(--mono); font-size: 11px; color: var(--text-mute); white-space: nowrap; }
 
 /* ---------- login ---------- */
 

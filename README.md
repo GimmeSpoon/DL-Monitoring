@@ -29,6 +29,7 @@ shared-password login.
 |---|---|
 | `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, network, disks) + per-GPU gauges, users, offline badges |
 | `/storage.html` | Per-server filesystems (size/used/free) and per-account usage — who consumes how much; the dashboard's disk block links here |
+| `/services.html` | Up/down of configured services (containers, tmux, supervisor, systemd, ports, HTTP, custom) grouped by label; independent of the monitored servers |
 | `/history.html` | Charts over 1h-30d: CPU, RAM, network, GPU util/memory/temperature, disk usage |
 | `/logs.html` | EVENTS tab (connections, logins, errors, storage scans) and GPU USAGE tab (user sessions per GPU) |
 
@@ -161,6 +162,41 @@ HOST=127.0.0.1 PORT=8080 npm start
   Sizing *other* users' data requires the monitor account to read their files:
   set `"storageScanSudo": true` (needs passwordless `sudo` for that account) or
   run the monitor as root. Without it, only world-readable data is counted.
+
+* **Services** (the `/services.html` tab) are configured in `services.json`
+  (gitignored; see `services.example.json`), which is **independent of the
+  monitored servers** — a service may live in a container on a monitored host, on
+  another box, or locally. The file has its own SSH connections (so you can check
+  services as a host-level account even if monitoring runs as a container account):
+
+```json
+{
+  "connections": {
+    "gpu-1-host": { "addr": "10.0.0.2", "port": 22, "username": "hostadmin", "privateKey": "~/.ssh/host_key" },
+    "local": { "local": true }
+  },
+  "services": [
+    { "name": "Inference API", "group": "gpu-1", "connection": "gpu-1-host", "type": "container", "container": "infer-api" },
+    { "name": "Nginx", "group": "edge", "connection": "local", "type": "systemd", "unit": "nginx" }
+  ]
+}
+```
+
+  Each service has a `type` (`container` / `tmux` / `supervisor` / `systemd` /
+  `port` / `http` / `command`) plus its fields, a `connection` (name ref), and an
+  optional `group` label used only for UI grouping. Modifiers on any service:
+  `"sudo": true` (prefix the probe with `sudo -n`), `"container": "<name>"` (run a
+  `command`/`port`/`http` probe *inside* that container via `docker exec`), and
+  `"user": "<u>"` for a tmux session owner. Checks run every 20s (override with
+  `"serviceCheckSeconds"` in `config.json`); up→down / down→up transitions are
+  logged to the Events tab. Absent `services.json` ⇒ the tab is empty and nothing
+  is checked.
+
+  Permissions: probing other users' docker/tmux/supervisor needs the connection
+  account to have the rights — the docker group or `sudo` for docker; the tmux
+  socket belongs to the session owner (use `user:`/`sudo:`); supervisorctl socket
+  access; `systemctl is-active` works unprivileged for system units. `port` needs
+  `bash` + `timeout`, `http` needs `curl`.
 
 * Poll/flush intervals: `lib/config.js`.
 * Metrics are aggregated to one sample per minute in `data/monitor.db`;
