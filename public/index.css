@@ -733,6 +733,10 @@ body {
 
 /* ---------- services page ---------- */
 
+/* services: stack the group boxes in one column (order follows services.json),
+   overriding the storage grid's side-by-side auto-fit columns — Storage keeps its */
+#svc-wrap { grid-template-columns: 1fr; }
+
 .svc-row {
 	display: grid;
 	grid-template-columns: auto 1fr auto;
