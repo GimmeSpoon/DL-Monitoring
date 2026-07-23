@@ -120,5 +120,5 @@ app.use(express.static(config.publicDir));
 const port = Number(process.env.PORT) || appConfig.port || config.port;
 const host = process.env.HOST || appConfig.host || config.host;
 app.listen(port, host || undefined, ()=>{
-	log(`MLLAB Monitoring Server v${pkg.version} listening on ${host || '0.0.0.0'}:${port}`);
+	log(`Server Monitor v${pkg.version} listening on ${host || '0.0.0.0'}:${port}`);
 });

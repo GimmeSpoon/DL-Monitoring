@@ -1,7 +1,7 @@
 {
-  "name": "mllab-monitor",
+  "name": "server-monitor",
   "version": "2.0.0",
-  "description": "MLLAB server monitoring: GPU + CPU/memory/disk over SSH, with history, event log and GPU usage log",
+  "description": "Server monitoring: GPU + CPU/memory/disk over SSH, with history, event log and GPU usage log",
   "main": "server.js",
   "engines": {
     "node": ">=14"
