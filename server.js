@@ -6,6 +6,7 @@ const { createEvents } = require('./lib/events');
 const { createSessionTracker } = require('./lib/sessions');
 const { createAggregator } = require('./lib/aggregator');
 const { createCollector } = require('./lib/collector');
+const { createStorageScanner } = require('./lib/storage');
 const { createMock } = require('./lib/mock');
 const { createRoutes } = require('./lib/routes');
 const pkg = require('./package.json');
@@ -32,7 +33,8 @@ if(!appConfig.webPasswordHash){
 }
 
 let collector;
-let monitorControl; // what /kill /revive act on (mock or real collector)
+let monitorControl;  // what /kill /revive act on (mock or real collector)
+let serverList = []; // real server configs (empty in --mock)
 
 const onIngest = (name, state, apps)=>{
 	aggregator.add(name, state);
@@ -46,6 +48,7 @@ if(mockMode){
 }
 else{
 	const servers = loadServerList();
+	serverList = servers;
 	const agentSock = process.env.SSH_AUTH_SOCK || null;
 	const defaultKey = appConfig.sshPrivateKey || process.env.SSH_PRIVATE_KEY || null;
 	// only remote (non-local) servers need SSH auth; a per-server key covers its own entry
@@ -75,12 +78,27 @@ else{
 monitorControl.start();
 onEvent('server_start', null, `v${pkg.version} started${mockMode ? ' (mock)' : ''}`);
 
+// per-account storage: slow scanner (default every 6h), separate from the poll
+const storage = createStorageScanner({
+	collector,
+	servers: serverList,
+	db,
+	onEvent,
+	roots: appConfig.storageRoots || config.storageRoots,
+	sudo: !!appConfig.storageScanSudo,
+	intervalMs: appConfig.storageScanHours ? appConfig.storageScanHours * 3600 * 1000 : config.storageScanIntervalMs,
+	timeoutMs: config.storageScanTimeoutMs,
+	firstDelayMs: mockMode ? 2000 : 20000,
+	mock: mockMode,
+});
+storage.start();
+
 setInterval(()=>{
 	aggregator.flush();
 	sessions.flush();
 }, config.flushIntervalMs);
 
-const retention = { metricsDays: 30, eventsDays: 90, usageDays: 365, ...(appConfig.retention || {}) };
+const retention = { metricsDays: 30, eventsDays: 90, usageDays: 365, storageDays: 90, ...(appConfig.retention || {}) };
 setInterval(()=>db.prune(retention), 3600 * 1000);
 
 const auth = createAuth({ appConfig, onEvent });

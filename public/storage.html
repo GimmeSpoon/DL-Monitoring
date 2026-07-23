@@ -1,0 +1,113 @@
+<html lang="en">
+  <head>
+    <title>MLLAB Monitor — Storage</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="index.css">
+    <script src="vendor/jquery-3.6.3.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+      // green -> red ramp for filesystem fullness (matches the dashboard)
+      const thermal = ['#2ea043', '#3fb950', '#d6b02f', '#e0863d', '#f0533f'];
+      const pivots = [30, 50, 70, 90];
+      const colorFor = (pct)=>{ for(let i = 0; i < pivots.length; i++){ if(pct < pivots[i]) return thermal[i]; } return thermal[4]; };
+
+      function fmt(b){
+        if(!Number.isFinite(b)) return '--';
+        const u = ['B', 'K', 'M', 'G', 'T', 'P'];
+        let i = 0, v = b;
+        while(v >= 1024 && i < u.length - 1){ v /= 1024; i++; }
+        return `${v >= 100 || i === 0 ? Math.round(v) : Math.round(v * 10) / 10}${u[i]}`;
+      }
+      const esc = (x)=>$('<i>').text(x == null ? '' : x).html();
+      const fmtTime = (ts)=>ts ? new Date(ts * 1000).toLocaleString() : '';
+
+      function render(d){
+        // filesystems
+        $('#fs-rows').html((d.mounts || []).map((m)=>{
+          const free = (m.total || 0) - (m.used || 0);
+          const pct = m.total ? m.used / m.total * 100 : 0;
+          return `<tr>
+            <td>${esc(m.mount)}</td>
+            <td>${fmt(m.total)}</td>
+            <td>${fmt(m.used)}</td>
+            <td>${fmt(free)}</td>
+            <td class="use-cell">
+              <span class="cellbar"><span class="cellbar-fill" style="width:${Math.min(100, pct)}%;background:${colorFor(pct)}"></span></span>
+              <span class="use-pct">${Math.round(pct)}%</span>
+            </td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="5">No filesystem data for this server</td></tr>');
+
+        // per-account usage
+        const accounts = d.accounts || [];
+        if(!accounts.length){
+          $('#acct-list').empty();
+          $('#acct-empty').text(d.scanned_at
+            ? 'The last scan found no accounts (check scan roots / read access in config.json).'
+            : 'No storage scan has completed yet. Scans run every 6h; the first runs shortly after startup.');
+          $('#scan-meta').text('');
+        }
+        else{
+          const max = Math.max(...accounts.map((a)=>a.bytes || 0), 1);
+          $('#acct-empty').empty();
+          $('#acct-list').html(accounts.map((a)=>{
+            const share = d.total_scanned ? (a.bytes / d.total_scanned * 100) : 0;
+            return `<div class="acct-row">
+              <span class="acct-name" title="${esc(a.account)}">${window.ICONS.user}${esc(a.account)}</span>
+              <span class="acct-track"><span class="acct-fill" style="width:${a.bytes / max * 100}%"></span></span>
+              <span class="acct-val">${fmt(a.bytes)} <em>${share.toFixed(1)}%</em></span>
+            </div>`;
+          }).join(''));
+          $('#scan-meta').text(`${accounts.length} accounts · ${fmt(d.total_scanned)} · scanned ${fmtTime(d.scanned_at)}`);
+        }
+      }
+
+      function load(server){
+        if(!server) return;
+        $.getJSON('/api/storage', { server }).done(render);
+      }
+
+      $(function(){
+        $('#brand-mark').html(window.ICONS.signal);
+        const want = new URLSearchParams(window.location.search).get('server');
+        populateServers($('#server-select'), (servers)=>{
+          const sel = (want && servers.some((s)=>s.name === want)) ? want : (servers[0] && servers[0].name);
+          if(sel){ $('#server-select').val(sel); load(sel); }
+        });
+        $('#server-select').on('change', function(){ load(this.value); });
+        setInterval(()=>load($('#server-select').val()), 30000);
+      });
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/"><span id="brand-mark"></span> MLLAB <span>Monitor</span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="topbar-right">
+        <button id="skin" class="icon-btn" type="button" aria-label="Toggle theme"></button>
+        <a href="#" id="logout" class="logout">Logout</a>
+      </div>
+    </header>
+
+    <div class="controls">
+      <label>Server <select id="server-select"></select></label>
+    </div>
+
+    <div class="storage-wrap">
+      <section class="panel">
+        <h3>Filesystems</h3>
+        <table class="log-table">
+          <thead><tr><th>Mount</th><th>Size</th><th>Used</th><th>Free</th><th>Use</th></tr></thead>
+          <tbody id="fs-rows"></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h3>Account usage <span id="scan-meta"></span></h3>
+        <div id="acct-list"></div>
+        <div class="storage-note" id="acct-empty"></div>
+      </section>
+    </div>
+  </body>
+</html>

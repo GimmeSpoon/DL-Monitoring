@@ -25,6 +25,22 @@ const fmtBytes = (b)=>{
 	return `${Math.round(b / MB)}M`;
 };
 
+// GPU process memory arrives in MiB (nvidia-smi query-compute-apps, nounits)
+const fmtMiB = (m)=>{
+	m = Number(m);
+	if(!Number.isFinite(m)) return '--';
+	return m >= 1024 ? `${Math.round(m / 1024 * 10) / 10}G` : `${m}M`;
+};
+
+// network rate: bytes/sec -> "12.3M/s" (own K tier — rates are smaller than capacities)
+const fmtRate = (b)=>{
+	if(!Number.isFinite(b)) return '--';
+	const u = ['B', 'K', 'M', 'G'];
+	let i = 0, v = b;
+	while(v >= 1024 && i < u.length - 1){ v /= 1024; i++; }
+	return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10}${u[i]}/s`;
+};
+
 // set a meter's fill (width + thermal color) and its readout text
 function setMeter(id, pct, color, text){
 	const p = Math.max(0, Math.min(100, Number(pct) || 0));
@@ -55,6 +71,7 @@ function buildGpu(name, gpu){
 			<span class="stat"><span class="k">PWR</span> <b id="pow${sel}">--</b></span>
 			<span class="stat fan"><span class="fan-ico" id="fan${sel}">${window.ICONS.fan}</span> <b id="fan-val${sel}">--</b></span>
 		</div>
+		<div class="proc-tip" id="proc${sel}"></div>
 	</div>`;
 }
 
@@ -82,7 +99,8 @@ function buildCard(state){
 			${meterHTML(`cpu${name}`, 'CPU')}
 			${meterHTML(`ram${name}`, 'RAM')}
 			<div class="sys-sub" id="load${name}"></div>
-			<div class="disks">${diskHTML}</div>
+			<div class="sys-sub" id="net${name}"></div>
+			<a class="disks disks-link" href="/storage.html?server=${encodeURIComponent(name)}" title="Storage details for ${name}">${diskHTML}</a>
 		</div>
 		<div class="users" id="user${name}"></div>
 		<div class="gpus">${gpuHTML}</div>
@@ -104,6 +122,14 @@ function updateGpu(name, gpu){
 	const inUse = Number(gpu['procs']) > 0 || Number(gpu['utilization_gpu']) > 0 || memRatio > 0.1;
 	$(`#gpu${sel}`).toggleClass('busy', inUse);
 	$(`#flag-txt${sel}`).text(inUse ? (Number(gpu['procs']) > 0 ? `busy · ${gpu['procs']} proc${gpu['procs'] > 1 ? 's' : ''}` : 'busy') : 'idle');
+
+	// hover popover: the compute processes running on this GPU (pid · user · mem)
+	const procs = gpu['processes'] || [];
+	$(`#gpu${sel}`).toggleClass('has-procs', procs.length > 0);
+	$(`#proc${sel}`).html(procs.length
+		? `<div class="proc-tip-head">${procs.length} process${procs.length > 1 ? 'es' : ''}</div>` + procs.map((p)=>
+			`<div class="proc-row"><span class="proc-user">${window.ICONS.user}${p['user'] || '—'}</span><span class="proc-pid">pid ${p['pid']}</span><span class="proc-mem">${fmtMiB(p['used_memory'])}</span></div>`).join('')
+		: '');
 
 	$(`#name${sel}`).text(gpu['gpu_name']);
 
@@ -146,6 +172,8 @@ function updateCard(state){
 		const load = sys['cpu']['load'] ? sys['cpu']['load'][0] : '--';
 		$(`#load${name}`).text(`load ${load}  ·  ${sys['cpu']['cores'] != null ? sys['cpu']['cores'] : '--'} cores`);
 	}
+	const net = sys['network'];
+	$(`#net${name}`).text(net ? `net  ↓ ${fmtRate(net['rx'])}  ↑ ${fmtRate(net['tx'])}` : 'net  ↓ --  ↑ --');
 	if(sys['memory']){
 		const r = sys['memory']['used'] / sys['memory']['total'];
 		setMeter(`ram${name}`, r * 100, colorFor(r * 100, util_pivots), `${fmtBytes(sys['memory']['used'])}/${fmtBytes(sys['memory']['total'])}`);

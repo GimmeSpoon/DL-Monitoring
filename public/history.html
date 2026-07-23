@@ -66,6 +66,11 @@
         mkChart('chart-ram', { unit: 'G', suggestedMax: memTotal }, [
           { label: 'used', slot: 1, data: sys.map((r)=>({ x: t(r.ts), y: r.mem_used / GiB })) },
         ]);
+        const MiB = 1024 ** 2;
+        mkChart('chart-net', { unit: ' MB/s' }, [
+          { label: 'rx', slot: 0, data: sys.map((r)=>({ x: t(r.ts), y: (r.rx || 0) / MiB })) },
+          { label: 'tx', slot: 4, data: sys.map((r)=>({ x: t(r.ts), y: (r.tx || 0) / MiB })) },
+        ]);
         const gpuIdxs = Object.keys(data.gpus || {}).sort((a, b)=>a - b);
         const gpuSeries = (field, div = 1)=>gpuIdxs.map((idx)=>({
           label: `GPU ${idx}`, slot: Number(idx),
@@ -124,6 +129,7 @@
     <div class="charts-grid">
       <div class="chart-card"><h3>CPU</h3><div class="chart-wrap"><canvas id="chart-cpu"></canvas></div></div>
       <div class="chart-card"><h3>RAM used</h3><div class="chart-wrap"><canvas id="chart-ram"></canvas></div></div>
+      <div class="chart-card"><h3>Network</h3><div class="chart-wrap"><canvas id="chart-net"></canvas></div></div>
       <div class="chart-card"><h3>GPU utilization</h3><div class="chart-wrap"><canvas id="chart-gpu-util"></canvas></div></div>
       <div class="chart-card"><h3>GPU memory</h3><div class="chart-wrap"><canvas id="chart-gpu-mem"></canvas></div></div>
       <div class="chart-card"><h3>GPU temperature</h3><div class="chart-wrap"><canvas id="chart-gpu-temp"></canvas></div></div>

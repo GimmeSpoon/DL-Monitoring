@@ -2,8 +2,10 @@
 
 This server shows your GPU servers' status on a single dashboard: every GPU
 (utilization, memory, temperature, power, fan) plus total resources per server —
-CPU, RAM, and disks. It also keeps history (charts), a server event log, and a
-GPU usage log (who used which GPU when), all behind a shared-password login.
+CPU, RAM, disks, and network throughput. A Storage tab breaks down each server's
+filesystems and which account consumes how much. It also keeps history (charts),
+a server event log, and a GPU usage log (who used which GPU when), all behind a
+shared-password login.
 
 ### Pros
 
@@ -25,9 +27,10 @@ GPU usage log (who used which GPU when), all behind a shared-password login.
 
 | Page | What it shows |
 |---|---|
-| `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, disks) + per-GPU gauges, users, offline badges |
-| `/history.html` | Charts over 1h-30d: CPU, RAM, GPU util/memory/temperature, disk usage |
-| `/logs.html` | EVENTS tab (connections, logins, errors) and GPU USAGE tab (user sessions per GPU) |
+| `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, network, disks) + per-GPU gauges, users, offline badges |
+| `/storage.html` | Per-server filesystems (size/used/free) and per-account usage — who consumes how much; the dashboard's disk block links here |
+| `/history.html` | Charts over 1h-30d: CPU, RAM, network, GPU util/memory/temperature, disk usage |
+| `/logs.html` | EVENTS tab (connections, logins, errors, storage scans) and GPU USAGE tab (user sessions per GPU) |
 
 ## Quickstart
 
@@ -150,8 +153,21 @@ HOST=127.0.0.1 PORT=8080 npm start
   session secret. Optional retention overrides (days):
 
 ```json
-{ "retention": { "metricsDays": 30, "eventsDays": 90, "usageDays": 365 } }
+{ "retention": { "metricsDays": 30, "eventsDays": 90, "usageDays": 365, "storageDays": 90 } }
 ```
+
+* **Per-account storage** is measured by a slow background scan (default every
+  6h — never in the 1s poll, since a `du` walk is I/O-heavy). It tries
+  filesystem quotas (`repquota`) and falls back to `du` on the configured roots,
+  where each top-level directory counts as one account. In `config.json`:
+
+```json
+{ "storageRoots": ["/home"], "storageScanSudo": false, "storageScanHours": 6 }
+```
+
+  Sizing *other* users' data requires the monitor account to read their files:
+  set `"storageScanSudo": true` (needs passwordless `sudo` for that account) or
+  run the monitor as root. Without it, only world-readable data is counted.
 
 * Poll/flush intervals: `lib/config.js`.
 * Metrics are aggregated to one sample per minute in `data/monitor.db`;
