@@ -41,6 +41,47 @@ const fmtRate = (b)=>{
 	return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10}${u[i]}/s`;
 };
 
+// network sparkline: a per-server rolling buffer of the last minute of rx/tx
+// rates (we already poll once a second), drawn as two tiny auto-scaled lines.
+const NET_SAMPLES = 60;
+const netHist = {};
+let netColors = { rx: '#22d3ee', tx: '#c48bff' }; // fallback until CSS vars are read
+function readNetColors(){
+	const cs = getComputedStyle(document.documentElement);
+	const rx = cs.getPropertyValue('--accent').trim();
+	const tx = cs.getPropertyValue('--net-tx').trim();
+	if(rx) netColors.rx = rx;
+	if(tx) netColors.tx = tx;
+}
+const withAlpha = (hex, a)=> /^#[0-9a-f]{6}$/i.test(hex) ? hex + a : hex;
+
+function drawSpark(cv, hist){
+	if(!cv) return;
+	const w = cv.clientWidth, h = cv.clientHeight;
+	if(!w || !h || hist.length < 2) return;
+	const dpr = window.devicePixelRatio || 1;
+	if(cv.width !== Math.round(w * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+	const ctx = cv.getContext('2d');
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	ctx.clearRect(0, 0, w, h);
+	const n = hist.length, pad = 2, plotH = h - pad * 2;
+	let max = 1;
+	for(const s of hist){ if(s.rx > max) max = s.rx; if(s.tx > max) max = s.tx; }
+	const X = (i)=> (i / (n - 1)) * w;
+	const Y = (v)=> h - pad - (v / max) * plotH;
+	function series(key, color){
+		ctx.beginPath();
+		for(let i = 0; i < n; i++){ const x = X(i), y = Y(hist[i][key]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+		ctx.lineTo(X(n - 1), h - pad); ctx.lineTo(X(0), h - pad); ctx.closePath();
+		ctx.fillStyle = withAlpha(color, '20'); ctx.fill();
+		ctx.beginPath();
+		for(let i = 0; i < n; i++){ const x = X(i), y = Y(hist[i][key]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+		ctx.lineWidth = 1.25; ctx.lineJoin = 'round'; ctx.strokeStyle = color; ctx.stroke();
+	}
+	series('tx', netColors.tx); // upload behind
+	series('rx', netColors.rx); // download on top (usually the larger flow)
+}
+
 // set a meter's fill (width + thermal color) and its readout text
 function setMeter(id, pct, color, text){
 	const p = Math.max(0, Math.min(100, Number(pct) || 0));
@@ -77,13 +118,6 @@ function buildGpu(name, gpu){
 
 function buildCard(state){
 	const name = state['name'];
-	const disks = (state['system'] && state['system']['disks']) || [];
-	const diskHTML = disks.map((d, i)=>
-		`<div class="disk-row">
-			<span class="disk-mount" title="${d['mount']}">${d['mount']}</span>
-			<div class="meter-track"><div class="meter-fill" id="disk${name}_${i}"></div></div>
-			<span class="disk-text" id="disk-text${name}_${i}"></span>
-		</div>`).join('');
 	const gpuHTML = state['gpus'].length
 		? state['gpus'].map((g)=>buildGpu(name, g)).join('')
 		: '<div class="no-gpu">No GPUs on this host</div>';
@@ -99,18 +133,20 @@ function buildCard(state){
 			${meterHTML(`cpu${name}`, 'CPU')}
 			${meterHTML(`ram${name}`, 'RAM')}
 			<div class="sys-sub" id="load${name}"></div>
-			<div class="sys-sub" id="net${name}"></div>
-			<a class="disks disks-link" href="/storage.html?server=${encodeURIComponent(name)}" title="Storage details for ${name}">${diskHTML}</a>
+			<div class="net">
+				<div class="net-read" id="net${name}"></div>
+				<canvas class="net-spark" id="net${name}-spark"></canvas>
+			</div>
 		</div>
 		<div class="users" id="user${name}"></div>
 		<div class="gpus">${gpuHTML}</div>
 	</section>`;
 }
 
-// structure changes only when servers / GPU counts / mount sets change
+// structure changes only when servers / GPU counts change
 function signature(states){
 	return JSON.stringify(Object.entries(states).map(([key, s])=>
-		[key, s['gpus'].length, ((s['system'] && s['system']['disks']) || []).map((d)=>d['mount'])]));
+		[key, s['gpus'].length]));
 }
 
 function updateGpu(name, gpu){
@@ -173,16 +209,18 @@ function updateCard(state){
 		$(`#load${name}`).text(`load ${load}  ·  ${sys['cpu']['cores'] != null ? sys['cpu']['cores'] : '--'} cores`);
 	}
 	const net = sys['network'];
-	$(`#net${name}`).text(net ? `net  ↓ ${fmtRate(net['rx'])}  ↑ ${fmtRate(net['tx'])}` : 'net  ↓ --  ↑ --');
+	const rx = net ? Number(net['rx']) : NaN, tx = net ? Number(net['tx']) : NaN;
+	$(`#net${name}`).html(`<span class="net-lbl">net</span><span class="net-rx">↓ ${fmtRate(rx)}</span><span class="net-tx">↑ ${fmtRate(tx)}</span>`);
+	if(net){
+		const h = (netHist[name] = netHist[name] || []);
+		h.push({ rx, tx });
+		if(h.length > NET_SAMPLES) h.shift();
+		drawSpark(document.getElementById(`net${name}-spark`), h);
+	}
 	if(sys['memory']){
 		const r = sys['memory']['used'] / sys['memory']['total'];
 		setMeter(`ram${name}`, r * 100, colorFor(r * 100, util_pivots), `${fmtBytes(sys['memory']['used'])}/${fmtBytes(sys['memory']['total'])}`);
 	}
-	(sys['disks'] || []).forEach((disk, i)=>{
-		const r = disk['total'] ? disk['used'] / disk['total'] : 0;
-		setMeter(`disk${name}_${i}`, r * 100, colorFor(r * 100, util_pivots), '');
-		$(`#disk-text${name}_${i}`).text(`${fmtBytes(disk['used'])}/${fmtBytes(disk['total'])}`);
-	});
 
 	for(const gpu of state['gpus']) updateGpu(name, gpu);
 }
@@ -194,6 +232,7 @@ function refresh(){
 			lastSignature = sig;
 			$('#dashboard').html(Object.values(states).map(buildCard).join(''));
 		}
+		readNetColors();
 		for(const state of Object.values(states)) updateCard(state);
 	});
 }

@@ -2,8 +2,8 @@
 
 This server shows your GPU servers' status on a single dashboard: every GPU
 (utilization, memory, temperature, power, fan) plus total resources per server —
-CPU, RAM, disks, and network throughput. A Storage tab breaks down each server's
-filesystems and which account consumes how much. It also keeps history (charts),
+CPU, RAM, and network throughput. A Storage tab breaks down each server's
+filesystems (size/used/free) and which account consumes how much. It also keeps history (charts),
 a server event log, and a GPU usage log (who used which GPU when), all behind a
 shared-password login.
 
@@ -27,8 +27,8 @@ shared-password login.
 
 | Page | What it shows |
 |---|---|
-| `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, network, disks) + per-GPU gauges, users, offline badges |
-| `/storage.html` | Per-server filesystems (size/used/free) and per-account usage — who consumes how much; the dashboard's disk block links here |
+| `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, network) + per-GPU gauges, users, offline badges |
+| `/storage.html` | Per-server filesystems (size/used/free) and per-account usage — who consumes how much |
 | `/services.html` | Up/down of configured services (containers, tmux, supervisor, systemd, ports, HTTP, custom) grouped by label; independent of the monitored servers |
 | `/history.html` | Charts over 1h-30d: CPU, RAM, network, GPU util/memory/temperature, disk usage |
 | `/logs.html` | EVENTS tab (connections, logins, errors, storage scans) and GPU USAGE tab (user sessions per GPU) |

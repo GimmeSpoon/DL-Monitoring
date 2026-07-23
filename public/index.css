@@ -22,6 +22,7 @@
 	--crit: #f0533f;
 	--online: #3fb950;
 	--offline: #f0533f;
+	--net-tx: #c48bff;      /* upload line on the net sparkline (rx reuses --accent) */
 	/* legacy names still read by some pages/JS */
 	--background: var(--bg);
 	--color: var(--text);
@@ -50,6 +51,7 @@
 	--crit: #e03131;
 	--online: #2f9e44;
 	--offline: #e03131;
+	--net-tx: #7c3aed;
 	--background: var(--bg);
 	--color: var(--text);
 	--chartSurface: #ffffff;
@@ -286,48 +288,13 @@ body {
 	margin: 4px 0 2px 49px;
 }
 
-.disks { margin-top: 6px; }
-
-/* the dashboard disk block links to the Storage tab */
-.disks-link {
-	display: block;
-	text-decoration: none;
-	color: inherit;
-	border-radius: 7px;
-	padding: 4px 5px;
-	margin: 2px -5px 0;
-	transition: background 0.15s, box-shadow 0.15s;
-}
-
-.disks-link:hover { background: var(--panel); box-shadow: inset 0 0 0 1px var(--border); }
-
-.disk-row {
-	display: grid;
-	grid-template-columns: 40px 1fr auto;
-	align-items: center;
-	gap: 9px;
-	margin: 4px 0;
-}
-
-.disk-mount {
-	font-family: var(--mono);
-	font-size: 10px;
-	color: var(--text-dim);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	direction: rtl;
-	text-align: left;
-}
-
-.disk-text {
-	font-family: var(--mono);
-	font-size: 10px;
-	color: var(--text-mute);
-	white-space: nowrap;
-	min-width: 78px;
-	text-align: right;
-}
+/* compact network-traffic sparkline (readout labels it, canvas below) */
+.net { margin: 5px 0 2px 49px; }
+.net-read { font-family: var(--mono); font-size: 10.5px; color: var(--text-mute); margin-bottom: 2px; }
+.net-lbl { color: var(--text-mute); margin-right: 4px; }
+.net-rx { color: var(--accent); }
+.net-tx { color: var(--net-tx); margin-left: 6px; }
+.net-spark { display: block; width: 100%; height: 28px; }
 
 /* ---------- users ---------- */
 
