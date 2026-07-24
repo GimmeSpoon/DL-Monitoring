@@ -22,6 +22,9 @@ function applyTheme(theme){
 applyTheme(localStorage.getItem('color-theme') || 'dark');
 
 $(function(){
+	// #skin isn't in the DOM when the head-run applyTheme fires, so its icon
+	// goes unpainted on first load; paint it now that the button exists.
+	$('#skin').html(document.documentElement.getAttribute('color-theme') === 'dark' ? window.ICONS.moon : window.ICONS.sun);
 	$('#skin').on('click', ()=>{
 		applyTheme(document.documentElement.getAttribute('color-theme') === 'dark' ? 'light' : 'dark');
 	});
