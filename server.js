@@ -1,5 +1,5 @@
 const express = require('express');
-const { config, loadServerList, loadServiceList, loadAppConfig } = require('./lib/config');
+const { config, loadServerList, loadServiceList, loadStorageConfig, loadAppConfig } = require('./lib/config');
 const { createAuth } = require('./lib/auth');
 const { openDb } = require('./lib/db');
 const { createEvents } = require('./lib/events');
@@ -65,14 +65,25 @@ const monitorControl = collector; // /api/collector stop|start act on this
 monitorControl.start();
 onEvent('server_start', null, `v${pkg.version} started`);
 
-// per-account storage: slow scanner (default every 6h), separate from the poll
+// storage: slow scanner (default every 6h), separate from the poll. Driven by
+// configs/storage.json — its own connections and typed targets. With no such file,
+// the legacy config.json settings are used to synthesise one `accounts` target per
+// monitored server over the collector's connections (v1/early-v2 behaviour).
+const storageConfig = loadStorageConfig();
+const storagePool = storageConfig
+	? createSshPool({ conns: storageConfig.connections, agentSock, defaultKey })
+	: null;
+const storageTargets = storageConfig
+	? storageConfig.targets.map((t)=>({ ...t, pool: storagePool }))
+	: serverList.map((s)=>({
+		scope: s.name, connection: s.name, type: 'accounts', pool: collector,
+		roots: appConfig.storageRoots || config.storageRoots,
+		sudo: !!appConfig.storageScanSudo,
+	}));
 const storage = createStorageScanner({
-	collector,
-	servers: serverList,
+	targets: storageTargets,
 	db,
 	onEvent,
-	roots: appConfig.storageRoots || config.storageRoots,
-	sudo: !!appConfig.storageScanSudo,
 	intervalMs: appConfig.storageScanHours ? appConfig.storageScanHours * 3600 * 1000 : config.storageScanIntervalMs,
 	timeoutMs: config.storageScanTimeoutMs,
 	firstDelayMs: 20000,
@@ -113,7 +124,7 @@ app.use(auth.sessionMiddleware);
 app.post('/api/login', auth.login);
 app.post('/api/logout', auth.logout);
 app.use(auth.gate);
-app.use(createRoutes({ collector, monitorControl, db, onEvent, serviceChecker }));
+app.use(createRoutes({ collector, monitorControl, db, onEvent, serviceChecker, storage }));
 app.use(express.static(config.publicDir));
 
 // listen host/port: env (PORT/HOST) wins, then config.json, then the defaults

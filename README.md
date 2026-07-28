@@ -28,7 +28,7 @@ shared-password login.
 | Page | What it shows |
 |---|---|
 | `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, network) + per-GPU gauges, users, offline badges |
-| `/storage.html` | Per-server filesystems (size/used/free) and per-account usage — who consumes how much |
+| `/storage.html` | Per-server filesystems (size/used/free) plus whatever `configs/storage.json` measures: per-account usage, per-container usage with the storage mounted into each one, and arbitrary paths |
 | `/services.html` | Up/down of configured services (containers, tmux, supervisor, systemd, ports, HTTP, custom) grouped by label; independent of the monitored servers |
 | `/history.html` | Charts over 1h-30d: CPU, RAM, network, GPU util/memory/temperature, disk usage |
 | `/logs.html` | EVENTS tab (connections, logins, errors, storage scans) and GPU USAGE tab (user sessions per GPU) |
@@ -54,10 +54,11 @@ npm install
 
 2. Copy the example and edit it for your GPU servers (usernames may differ per
    host — no shared password needed; add an optional `"privateKey"` to any
-   server that needs a different key than your default):
+   server that needs a different key than your default). All config lives in
+   `configs/`:
 
 ```bash
-cp servers.example.json servers.json
+cp configs/servers.example.json configs/servers.json
 ```
 
 ```json
@@ -123,11 +124,24 @@ Open `http://<monitoring-server>:51234`, log in, done.
 ## Development without GPU servers
 
 To test real collection without a GPU box, add your own machine to
-`servers.json` (`"addr": "127.0.0.1"`, with a local `openssh-server` and your
-key in `~/.ssh/authorized_keys`), or mark the entry `"local": true` to skip SSH
-entirely; you get CPU/RAM/disk/network and an empty GPU list.
+`configs/servers.json` (`"addr": "127.0.0.1"`, with a local `openssh-server` and
+your key in `~/.ssh/authorized_keys`), or mark the entry `"local": true` to skip
+SSH entirely; you get CPU/RAM/disk/network and an empty GPU list.
 
 ## Configuration
+
+Every config file lives in `configs/` (all gitignored except the `*.example.json`
+templates):
+
+| File | What it configures |
+|---|---|
+| `configs/config.json` | Web password hash, session secret, listen host/port, retention |
+| `configs/servers.json` | The GPU servers to monitor (the 1s poll) |
+| `configs/services.json` | Service up/down checks (`/services.html`) |
+| `configs/storage.json` | Storage scans (`/storage.html`) |
+
+A file left in the repo root, where these used to live, is still read when
+`configs/` doesn't have it — upgrading moves nothing.
 
 * **Listen host / port** (default `0.0.0.0:51234`). Set them in `config.json`,
   or via the `HOST` / `PORT` environment variables (env wins):
@@ -150,21 +164,69 @@ HOST=127.0.0.1 PORT=8080 npm start
 { "retention": { "metricsDays": 30, "eventsDays": 90, "usageDays": 365, "storageDays": 90 } }
 ```
 
-* **Per-account storage** is measured by a slow background scan (default every
-  6h — never in the 1s poll, since a `du` walk is I/O-heavy). It tries
-  filesystem quotas (`repquota`) and falls back to `du` on the configured roots,
-  where each top-level directory counts as one account. In `config.json`:
+* **Storage** (the `/storage.html` tab) is measured by a slow background scan —
+  never in the 1s poll, since a `du` walk is I/O-heavy. It is configured in
+  `configs/storage.json` (see `configs/storage.example.json`), which, like
+  `services.json`, has **its own SSH connections**: a storage target may live on
+  a box nobody monitors, and container sizes usually need a host-level account:
 
 ```json
-{ "storageRoots": ["/home"], "storageScanSudo": false, "storageScanHours": 6 }
+{
+  "connections": {
+    "gpu-1-host": { "addr": "10.0.0.2", "port": 22, "username": "hostadmin" },
+    "local": { "local": true }
+  },
+  "targets": [
+    { "scope": "server-a", "connection": "gpu-1-host", "type": "accounts", "roots": ["/home"], "sudo": true },
+    { "scope": "server-a", "connection": "gpu-1-host", "type": "containers", "sudo": true, "everyHours": 2 },
+    { "scope": "server-a", "connection": "gpu-1-host", "type": "paths", "label": "Datasets", "paths": ["/data/datasets"] }
+  ]
+}
 ```
 
-  Sizing *other* users' data requires the monitor account to read their files:
-  set `"storageScanSudo": true` (needs passwordless `sudo` for that account) or
-  run the monitor as root. Without it, only world-readable data is counted.
+  Each target measures one thing on one connection and files its results under a
+  `scope` — the name it appears under in the Storage page's server dropdown (use
+  the monitored server's name to have it share that server's filesystem panel;
+  it defaults to the connection name). Target types:
 
-* **Services** (the `/services.html` tab) are configured in `services.json`
-  (gitignored; see `services.example.json`), which is **independent of the
+  | `type` | Measures | Options |
+  |---|---|---|
+  | `accounts` | One entry per account: filesystem quotas (`repquota`), falling back to `du` of `<root>/*` | `roots`, `strategy` (`auto`/`quota`/`du`) |
+  | `containers` | One entry per container, expandable to the storage mounted into it | `engine` (`docker`/`podman`), `layers`, `excludeMounts` |
+  | `paths` | `du -sb` of explicit paths | `paths` |
+  | `command` | Any command printing `<bytes>\t<label>` lines — the escape hatch | `command` |
+
+  Every target also takes `"label"` (shown in the UI), `"sudo": true` (prefix the
+  privileged command with `sudo -n`), and `"everyHours"` to override the global
+  scan interval — so a cheap container listing can run hourly while a `du` walk
+  stays at 6h. Each target's last run, duration, entry count and error are shown
+  in the page's **Scan targets** panel, and a **Scan now** button forces a pass.
+
+  `containers` measures two layers, both on by default via
+  `"layers": ["writable", "mounts"]`:
+
+  * `writable` — the container's writable layer and virtual size, from
+    `docker ps -s` (one cheap command).
+  * `mounts` — `du -sb` of the host source behind every mount, so a container's
+    volumes *and* bind mounts are sized and listed with their in-container
+    destination. This is the `du` cost; drop it from `layers` to keep the target
+    instant. Plumbing mounts (`/etc`, `/proc`, `/run`, …) are skipped —
+    override with `"excludeMounts"`. A source mounted into two containers is
+    charged to both and flagged `shared`.
+
+  Sizing *other* users' data (or talking to the docker socket) requires the
+  connection's account to have access: set `"sudo": true` on the target (needs
+  passwordless `sudo`) or use a privileged account. Without it, only
+  world-readable data is counted.
+
+  With **no `configs/storage.json`**, the pre-v2 behaviour applies: one
+  `accounts` target per monitored server, over the collector's own connections,
+  configured in `config.json` as
+  `{ "storageRoots": ["/home"], "storageScanSudo": false, "storageScanHours": 6 }`.
+
+* **Services** (the `/services.html` tab) are configured in
+  `configs/services.json` (gitignored; see `configs/services.example.json`),
+  which is **independent of the
   monitored servers** — a service may live in a container on a monitored host, on
   another box, or locally. The file has its own SSH connections (so you can check
   services as a host-level account even if monitoring runs as a container account):

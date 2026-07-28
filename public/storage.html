@@ -21,6 +21,102 @@
       }
       const esc = (x)=>$('<i>').text(x == null ? '' : x).html();
       const fmtTime = (ts)=>ts ? new Date(ts * 1000).toLocaleString() : '';
+      const sum = (rows)=>rows.reduce((s, r)=>s + (r.bytes || 0), 0);
+      const maxTs = (rows)=>rows.reduce((t, r)=>Math.max(t, r.ts || 0), 0);
+
+      // which scan kind fills which section — a section is drawn when it has rows
+      // or a target that should be producing them
+      const SECTIONS = [
+        { id: 'acct', kinds: ['account'], types: ['accounts'], title: 'Account usage' },
+        { id: 'cnt', kinds: ['container'], types: ['containers'], title: 'Container usage' },
+        { id: 'path', kinds: ['path', 'custom'], types: ['paths', 'command'], title: 'Paths' },
+      ];
+
+      // shared name/bar/value row used by every non-container kind
+      function bar(icon, name, bytes, max, note){
+        return `<div class="acct-row">
+          <span class="acct-name" title="${esc(name)}">${icon}${esc(name)}</span>
+          <span class="acct-track"><span class="acct-fill" style="width:${max ? bytes / max * 100 : 0}%"></span></span>
+          <span class="acct-val">${fmt(bytes)}${note ? ` <em>${esc(note)}</em>` : ''}</span>
+        </div>`;
+      }
+
+      // a container expands to the storage mounted into it: destination, kind of
+      // mount, and the host path the bytes were measured on
+      function container(c, max){
+        const m = c.meta || {};
+        const parts = [];
+        if(m.writable) parts.push(`rw ${fmt(m.writable)}`);
+        if(m.mounted) parts.push(`mnt ${fmt(m.mounted)}`);
+        const mounts = (c.mounts || []).slice().sort((a, b)=>b.bytes - a.bytes);
+        const rows = mounts.map((mt)=>`<div class="mnt-row">
+            <span class="mnt-dest" title="${esc(mt.name)}">${esc(mt.name)}</span>
+            <span class="mnt-src" title="${esc((mt.meta || {}).source)}">${esc((mt.meta || {}).type || '')} ${esc((mt.meta || {}).source || '')}${(mt.meta || {}).shared > 1 ? ` · shared ×${(mt.meta || {}).shared}` : ''}</span>
+            <span class="mnt-val">${fmt(mt.bytes)}</span>
+          </div>`).join('');
+        const info = [m.image ? `<div class="mnt-note">image ${esc(m.image)}</div>` : '',
+          m.status ? `<div class="mnt-note">${esc(m.status)}</div>` : ''].join('');
+        const body = (rows || info)
+          ? `<div class="cnt-mounts">${info}${rows || '<div class="mnt-note">No measured mounts (all excluded, or the mount layer is off).</div>'}</div>`
+          : '';
+        return `<details class="cnt">
+          <summary class="acct-row">
+            <span class="acct-name" title="${esc(c.name)}">${window.ICONS.box}${esc(c.name)}</span>
+            <span class="acct-track"><span class="acct-fill" style="width:${max ? c.bytes / max * 100 : 0}%"></span></span>
+            <span class="acct-val">${fmt(c.bytes)}${parts.length ? ` <em>${parts.join(' + ')}</em>` : ''}</span>
+          </summary>${body}
+        </details>`;
+      }
+
+      function renderSection(sec, d){
+        const rows = sec.kinds.flatMap((k)=>(d.kinds || {})[k] || []);
+        const targets = (d.targets || []).filter((t)=>sec.types.includes(t.type));
+        const $box = $(`#sec-${sec.id}`);
+        if(!rows.length && !targets.length){ $box.hide(); return; }
+        $box.show();
+
+        if(!rows.length){
+          const failing = targets.find((t)=>t.ok === false);
+          $(`#${sec.id}-list`).empty();
+          $(`#${sec.id}-meta`).text('');
+          $(`#${sec.id}-empty`).text(failing
+            ? `Last scan failed: ${failing.error}`
+            : (targets.some((t)=>t.ts) ? 'The last scan found nothing here.' : 'No scan has completed yet — the first runs shortly after startup.'));
+          return;
+        }
+
+        const total = sum(rows);
+        const max = Math.max(...rows.map((r)=>r.bytes || 0), 1);
+        $(`#${sec.id}-empty`).empty();
+        $(`#${sec.id}-list`).html(rows.map((r)=>{
+          if(r.kind === 'container') return container(r, max);
+          const share = total ? (r.bytes / total * 100) : 0;
+          const icon = r.kind === 'account' ? window.ICONS.user : window.ICONS.folder;
+          return bar(icon, r.name, r.bytes, max, `${share.toFixed(1)}%`);
+        }).join(''));
+        $(`#${sec.id}-meta`).text(`${rows.length} · ${fmt(total)} · scanned ${fmtTime(maxTs(rows))}`);
+      }
+
+      // per-target health: a target that has been failing for days otherwise just
+      // looks like a section with no data
+      function renderTargets(d){
+        const targets = d.targets || [];
+        if(!targets.length){ $('#sec-scan').hide(); return; }
+        $('#sec-scan').show();
+        $('#scan-rows').html(targets.map((t)=>{
+          const state = t.ok === null ? 'pending' : (t.ok ? 'ok' : 'failed');
+          const detail = t.ok === false ? t.error
+            : (t.ok ? `${t.entries} entries · ${fmt(t.bytes)} · ${(t.ms / 1000).toFixed(1)}s${t.method ? ` · ${t.method}` : ''}` : 'not run yet');
+          return `<tr>
+            <td>${esc(t.label)}</td>
+            <td class="scan-conn">${esc(t.connection)}</td>
+            <td><span class="scan-state ${state}">${state}</span></td>
+            <td class="scan-detail" title="${esc(detail)}">${esc(detail)}</td>
+            <td>${t.ts ? esc(fmtTime(t.ts)) : '--'}</td>
+            <td>${t.every_hours}h</td>
+          </tr>`;
+        }).join(''));
+      }
 
       function render(d){
         // filesystems
@@ -39,28 +135,8 @@
           </tr>`;
         }).join('') || '<tr><td colspan="5">No filesystem data for this server</td></tr>');
 
-        // per-account usage
-        const accounts = d.accounts || [];
-        if(!accounts.length){
-          $('#acct-list').empty();
-          $('#acct-empty').text(d.scanned_at
-            ? 'The last scan found no accounts (check scan roots / read access in config.json).'
-            : 'No storage scan has completed yet. Scans run every 6h; the first runs shortly after startup.');
-          $('#scan-meta').text('');
-        }
-        else{
-          const max = Math.max(...accounts.map((a)=>a.bytes || 0), 1);
-          $('#acct-empty').empty();
-          $('#acct-list').html(accounts.map((a)=>{
-            const share = d.total_scanned ? (a.bytes / d.total_scanned * 100) : 0;
-            return `<div class="acct-row">
-              <span class="acct-name" title="${esc(a.account)}">${window.ICONS.user}${esc(a.account)}</span>
-              <span class="acct-track"><span class="acct-fill" style="width:${a.bytes / max * 100}%"></span></span>
-              <span class="acct-val">${fmt(a.bytes)} <em>${share.toFixed(1)}%</em></span>
-            </div>`;
-          }).join(''));
-          $('#scan-meta').text(`${accounts.length} accounts · ${fmt(d.total_scanned)} · scanned ${fmtTime(d.scanned_at)}`);
-        }
+        for(const sec of SECTIONS) renderSection(sec, d);
+        renderTargets(d);
       }
 
       function load(server){
@@ -69,7 +145,7 @@
       }
 
       // manual reload: filesystem sizes are live (1s poll), so a re-fetch is instant
-      // and fresh; per-account usage still reflects the last periodic scan
+      // and fresh; the scan sections still reflect each target's last run
       function refresh(){
         const $b = $('#refresh'), server = $('#server-select').val();
         if(!server || $b.prop('disabled')) return;
@@ -77,12 +153,26 @@
         $.getJSON('/api/storage', { server }).done(render).always(()=>$b.removeClass('spin').prop('disabled', false));
       }
 
+      // force every target of this scope to run now. A du walk can take minutes,
+      // so the button stays busy until the server answers.
+      function scanNow(){
+        const $b = $('#scan-now'), server = $('#server-select').val();
+        if(!server || $b.prop('disabled')) return;
+        $b.addClass('spin').prop('disabled', true);
+        $.post(`/api/storage/scan?server=${encodeURIComponent(server)}`)
+          .always(()=>{ $b.removeClass('spin').prop('disabled', false); load(server); });
+      }
+
       $(function(){
         $('#brand-mark').html(window.ICONS.signal);
         $('#refresh').html(window.ICONS.refresh + 'Refresh').on('click', refresh);
+        $('#scan-now').on('click', scanNow);
         const want = new URLSearchParams(window.location.search).get('server');
-        populateServers($('#server-select'), (servers)=>{
-          const sel = (want && servers.some((s)=>s.name === want)) ? want : (servers[0] && servers[0].name);
+        $.getJSON('/api/storage/scopes').done((data)=>{
+          const scopes = data.scopes || [];
+          $('#server-select').html(scopes.map((s)=>
+            `<option value="${s.name}">${s.name}${s.online ? '' : ' (offline)'}</option>`).join(''));
+          const sel = (want && scopes.some((s)=>s.name === want)) ? want : (scopes[0] && scopes[0].name);
           if(sel){ $('#server-select').val(sel); load(sel); }
         });
         $('#server-select').on('change', function(){ load(this.value); });
@@ -103,6 +193,7 @@
     <div class="controls">
       <label>Server <select id="server-select"></select></label>
       <button id="refresh" class="range-btn" type="button" title="Reload storage now"></button>
+      <button id="scan-now" class="range-btn" type="button" title="Run every storage scan for this server now (can take minutes)">Scan now</button>
     </div>
 
     <div class="storage-wrap">
@@ -114,10 +205,30 @@
         </table>
       </section>
 
-      <section class="panel">
-        <h3>Account usage <span id="scan-meta"></span></h3>
+      <section class="panel" id="sec-acct">
+        <h3>Account usage <span id="acct-meta"></span></h3>
         <div id="acct-list"></div>
         <div class="storage-note" id="acct-empty"></div>
+      </section>
+
+      <section class="panel" id="sec-cnt">
+        <h3>Container usage <span id="cnt-meta"></span></h3>
+        <div id="cnt-list"></div>
+        <div class="storage-note" id="cnt-empty"></div>
+      </section>
+
+      <section class="panel" id="sec-path">
+        <h3>Paths <span id="path-meta"></span></h3>
+        <div id="path-list"></div>
+        <div class="storage-note" id="path-empty"></div>
+      </section>
+
+      <section class="panel" id="sec-scan">
+        <h3>Scan targets</h3>
+        <table class="log-table">
+          <thead><tr><th>Target</th><th>Connection</th><th>State</th><th>Last result</th><th>Ran</th><th>Every</th></tr></thead>
+          <tbody id="scan-rows"></tbody>
+        </table>
       </section>
     </div>
   </body>
