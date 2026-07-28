@@ -143,6 +143,10 @@ templates):
 A file left in the repo root, where these used to live, is still read when
 `configs/` doesn't have it — upgrading moves nothing.
 
+**[configs/README.md](configs/README.md) documents every file and field in
+detail**, with recipes and a troubleshooting table; what follows here is the
+short version.
+
 * **Listen host / port** (default `0.0.0.0:51234`). Set them in `config.json`,
   or via the `HOST` / `PORT` environment variables (env wins):
 
