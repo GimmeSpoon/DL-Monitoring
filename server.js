@@ -65,44 +65,76 @@ const monitorControl = collector; // /api/collector stop|start act on this
 monitorControl.start();
 onEvent('server_start', null, `v${pkg.version} started`);
 
+// storage and services are rebuildable at runtime (POST /api/config/reload): each
+// owns nothing but its own timers and SSH pool, so tearing one down and building it
+// from the file again costs a reconnect. `features` is what the routes read, and it
+// is mutated in place so a reload is visible without re-mounting the router.
+const features = { storage: null, storagePool: null, services: null, servicePool: null };
+
 // storage: slow scanner (default every 6h), separate from the poll. Driven by
 // configs/storage.json — its own connections and typed targets. With no such file,
 // the legacy config.json settings are used to synthesise one `accounts` target per
 // monitored server over the collector's connections (v1/early-v2 behaviour).
-const storageConfig = loadStorageConfig();
-const storagePool = storageConfig
-	? createSshPool({ conns: storageConfig.connections, agentSock, defaultKey })
-	: null;
-const storageTargets = storageConfig
-	? storageConfig.targets.map((t)=>({ ...t, pool: storagePool }))
-	: serverList.map((s)=>({
-		scope: s.name, connection: s.name, type: 'accounts', pool: collector,
-		roots: appConfig.storageRoots || config.storageRoots,
-		sudo: !!appConfig.storageScanSudo,
-	}));
-const storage = createStorageScanner({
-	targets: storageTargets,
-	db,
-	onEvent,
-	intervalMs: appConfig.storageScanHours ? appConfig.storageScanHours * 3600 * 1000 : config.storageScanIntervalMs,
-	timeoutMs: config.storageScanTimeoutMs,
-	firstDelayMs: 20000,
-});
-storage.start();
+function buildStorage(firstDelayMs){
+	const cfg = loadStorageConfig();
+	const pool = cfg ? createSshPool({ conns: cfg.connections, agentSock, defaultKey }) : null;
+	const targets = cfg
+		? cfg.targets.map((t)=>({ ...t, pool }))
+		: serverList.map((s)=>({
+			scope: s.name, connection: s.name, type: 'accounts', pool: collector,
+			roots: appConfig.storageRoots || config.storageRoots,
+			sudo: !!appConfig.storageScanSudo,
+		}));
+	features.storagePool = pool;
+	features.storage = createStorageScanner({
+		targets,
+		db,
+		onEvent,
+		intervalMs: appConfig.storageScanHours ? appConfig.storageScanHours * 3600 * 1000 : config.storageScanIntervalMs,
+		timeoutMs: config.storageScanTimeoutMs,
+		firstDelayMs,
+	});
+	features.storage.start();
+	return { targets: targets.length, connections: cfg ? Object.keys(cfg.connections).length : 0, source: cfg ? 'storage.json' : 'config.json (legacy)' };
+}
 
 // services: independent up/down checks over their own SSH pool (separate config,
 // separate connections). Dormant when services.json is absent.
-const serviceConfig = loadServiceList();
-const servicePool = createSshPool({ conns: serviceConfig.connections, agentSock, defaultKey });
-const serviceChecker = createServiceChecker({
-	services: serviceConfig.services,
-	pool: servicePool,
-	onEvent,
-	intervalMs: appConfig.serviceCheckSeconds ? appConfig.serviceCheckSeconds * 1000 : config.serviceCheckIntervalMs,
-	timeoutMs: config.serviceCheckTimeoutMs,
-	firstDelayMs: 8000,
-});
-serviceChecker.start();
+function buildServices(firstDelayMs){
+	const cfg = loadServiceList();
+	const pool = createSshPool({ conns: cfg.connections, agentSock, defaultKey });
+	features.servicePool = pool;
+	features.services = createServiceChecker({
+		services: cfg.services,
+		pool,
+		onEvent,
+		intervalMs: appConfig.serviceCheckSeconds ? appConfig.serviceCheckSeconds * 1000 : config.serviceCheckIntervalMs,
+		timeoutMs: config.serviceCheckTimeoutMs,
+		firstDelayMs,
+	});
+	features.services.start();
+	return { services: cfg.services.length, connections: Object.keys(cfg.connections).length };
+}
+
+// Re-read both files and swap in fresh instances. The old scanner/checker are
+// stopped first, but a pass already in flight runs to completion — it writes the
+// same kind of rows to the same DB, so letting it finish is harmless and beats
+// leaving a half-scanned target behind. Only a pool we created is disposed; the
+// legacy storage path borrows the collector's connections, which must survive.
+function reloadFeatures(){
+	if(features.storage) features.storage.stop();
+	if(features.storagePool) features.storagePool.stop();
+	if(features.services) features.services.stop();
+	if(features.servicePool) features.servicePool.stop();
+	// short first delay: a reload is a deliberate act, so run soon rather than
+	// waiting out the settle time a cold start needs
+	const storage = buildStorage(2000);
+	const services = buildServices(2000);
+	return { storage, services };
+}
+
+buildStorage(20000);
+buildServices(8000);
 
 setInterval(()=>{
 	aggregator.flush();
@@ -124,7 +156,7 @@ app.use(auth.sessionMiddleware);
 app.post('/api/login', auth.login);
 app.post('/api/logout', auth.logout);
 app.use(auth.gate);
-app.use(createRoutes({ collector, monitorControl, db, onEvent, serviceChecker, storage }));
+app.use(createRoutes({ collector, monitorControl, db, onEvent, features, reloadFeatures }));
 app.use(express.static(config.publicDir));
 
 // listen host/port: env (PORT/HOST) wins, then config.json, then the defaults

@@ -535,8 +535,9 @@ body {
 #refresh:disabled { opacity: 0.6; cursor: default; }
 #refresh.spin svg { animation: spin 0.8s linear infinite; }
 
-/* storage "Scan now": no icon to spin, so busy is shown by dimming */
-#scan-now:disabled, #scan-now.spin { opacity: 0.55; cursor: default; }
+/* "Scan now" / "Reload config": no icon to spin, so busy is shown by dimming */
+#scan-now:disabled, #scan-now.spin, #reload:disabled, #reload.spin { opacity: 0.55; cursor: default; }
+.reload-note { font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
 
 /* ---------- history charts ---------- */
 

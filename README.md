@@ -143,6 +143,10 @@ templates):
 A file left in the repo root, where these used to live, is still read when
 `configs/` doesn't have it — upgrading moves nothing.
 
+`services.json` and `storage.json` are re-read at runtime by the **Reload
+config** button on the Services and Storage tabs; `servers.json` and
+`config.json` still need a restart.
+
 **[configs/README.md](configs/README.md) documents every file and field in
 detail**, with recipes and a troubleshooting table; what follows here is the
 short version.

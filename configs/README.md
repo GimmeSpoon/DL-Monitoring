@@ -36,8 +36,22 @@ The three feature configs are deliberately not equally strict:
 * `config.json` — invalid JSON **throws** rather than being reset, so a bad edit
   can't silently wipe your web password and session secret.
 
-Nothing is watched for changes: every file is read once at startup. Restart to
-apply an edit.
+### Applying an edit
+
+`services.json` and `storage.json` reload at runtime: press **Reload config** on
+either the Services or the Storage tab (both call `POST /api/config/reload`, and
+both files are re-read together). The old checker and scanner are stopped, their
+SSH pools disposed, and fresh ones built from disk — so added, changed, and
+removed entries all take effect, and a scan runs a couple of seconds later. A
+pass already in flight is allowed to finish. The reload is logged as a
+`config_reload` event.
+
+Nothing is watched automatically. A file watcher would fire on the half-written
+file an editor leaves mid-save, so the trigger is deliberate.
+
+`servers.json` and `config.json` still need a restart — the collector holds live
+per-server poll state, and the listening socket and password hash are bound at
+startup.
 
 ---
 
@@ -296,4 +310,5 @@ unprivileged.
 | Storage account totals far too low | The scan account can't read other users' files — `"sudo": true` |
 | Container target reports `command not found` | No docker on that connection, or `sudo -n` isn't permitted for it |
 | A storage section is missing entirely | No target of that type for the selected scope — the page only draws sections something feeds |
-| Edits did nothing | Configs are read at startup only. Restart. |
+| Edits did nothing | `services.json` / `storage.json` need **Reload config**; `servers.json` / `config.json` need a restart |
+| A scan reports 0 entries and looks fine | It isn't fine — check the target's error. A scan that measures nothing *and* writes to stderr is reported as failed. |

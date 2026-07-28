@@ -24,12 +24,14 @@
 
       function render(services){
         const $wrap = $('#svc-wrap');
+        // the group filter and re-check are meaningless with nothing configured,
+        // but Reload config is exactly what you need then — so only these two hide
         if(!services.length){
-          $('#controls').hide();
-          $wrap.html('<div class="storage-note">No services configured. Add a <code>services.json</code> (see <code>services.example.json</code>) and restart.</div>');
+          $('#group-wrap, #refresh').hide();
+          $wrap.html('<div class="storage-note">No services configured. Add <code>configs/services.json</code> (see <code>configs/services.example.json</code>), then press Reload config.</div>');
           return;
         }
-        $('#controls').show();
+        $('#group-wrap, #refresh').show();
 
         const groups = [...new Set(services.map((s)=>s.group || 'ungrouped'))];
         syncFilter(groups);
@@ -84,9 +86,22 @@
           .always(()=>$b.removeClass('spin').prop('disabled', false));
       }
 
+      // re-read services.json without a restart; the checker is rebuilt from the
+      // file, so added/removed services and connections both take effect
+      function reloadConfig(){
+        const $b = $('#reload');
+        if($b.prop('disabled')) return;
+        $b.addClass('spin').prop('disabled', true);
+        $.post('/api/config/reload')
+          .done((r)=>$('#reload-note').text(`${r.services.services} services · ${r.services.connections} connections`))
+          .fail((x)=>$('#reload-note').text(`reload failed: ${(x.responseJSON || {}).error || x.status}`))
+          .always(()=>{ $b.removeClass('spin').prop('disabled', false); load(); });
+      }
+
       $(function(){
         $('#brand-mark').html(window.ICONS.signal);
         $('#refresh').html(window.ICONS.refresh + 'Refresh').on('click', recheck);
+        $('#reload').on('click', reloadConfig);
         $('#group-select').on('change', load);
         load();
         setInterval(load, 10000);
@@ -104,8 +119,10 @@
     </header>
 
     <div class="controls" id="controls">
-      <label>Group <select id="group-select"></select></label>
+      <label id="group-wrap">Group <select id="group-select"></select></label>
       <button id="refresh" class="range-btn" type="button" title="Re-check all services now"></button>
+      <button id="reload" class="range-btn" type="button" title="Re-read configs/services.json and configs/storage.json from disk">Reload config</button>
+      <span id="reload-note" class="reload-note"></span>
     </div>
 
     <div class="storage-wrap" id="svc-wrap"></div>

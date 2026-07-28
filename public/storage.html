@@ -163,18 +163,36 @@
           .always(()=>{ $b.removeClass('spin').prop('disabled', false); load(server); });
       }
 
+      // re-read storage.json without a restart. Scopes and targets can both change,
+      // so the whole dropdown is rebuilt rather than just the panels.
+      function reloadConfig(){
+        const $b = $('#reload');
+        if($b.prop('disabled')) return;
+        $b.addClass('spin').prop('disabled', true);
+        $.post('/api/config/reload')
+          .done((r)=>$('#reload-note').text(`${r.storage.targets} targets from ${r.storage.source}`))
+          .fail((x)=>$('#reload-note').text(`reload failed: ${(x.responseJSON || {}).error || x.status}`))
+          .always(()=>{ $b.removeClass('spin').prop('disabled', false); loadScopes($('#server-select').val()); });
+      }
+
+      function loadScopes(want){
+        $.getJSON('/api/storage/scopes').done((data)=>{
+          const scopes = data.scopes || [];
+          // only a monitored server can be known to be down; a scan-only scope
+          // has no poll behind it, so it gets no badge either way
+          $('#server-select').html(scopes.map((s)=>
+            `<option value="${s.name}">${s.name}${s.online === false ? ' (offline)' : ''}</option>`).join(''));
+          const sel = (want && scopes.some((s)=>s.name === want)) ? want : (scopes[0] && scopes[0].name);
+          if(sel){ $('#server-select').val(sel); load(sel); }
+        });
+      }
+
       $(function(){
         $('#brand-mark').html(window.ICONS.signal);
         $('#refresh').html(window.ICONS.refresh + 'Refresh').on('click', refresh);
         $('#scan-now').on('click', scanNow);
-        const want = new URLSearchParams(window.location.search).get('server');
-        $.getJSON('/api/storage/scopes').done((data)=>{
-          const scopes = data.scopes || [];
-          $('#server-select').html(scopes.map((s)=>
-            `<option value="${s.name}">${s.name}${s.online ? '' : ' (offline)'}</option>`).join(''));
-          const sel = (want && scopes.some((s)=>s.name === want)) ? want : (scopes[0] && scopes[0].name);
-          if(sel){ $('#server-select').val(sel); load(sel); }
-        });
+        $('#reload').on('click', reloadConfig);
+        loadScopes(new URLSearchParams(window.location.search).get('server'));
         $('#server-select').on('change', function(){ load(this.value); });
         setInterval(()=>load($('#server-select').val()), 30000);
       });
@@ -194,6 +212,8 @@
       <label>Server <select id="server-select"></select></label>
       <button id="refresh" class="range-btn" type="button" title="Reload storage now"></button>
       <button id="scan-now" class="range-btn" type="button" title="Run every storage scan for this server now (can take minutes)">Scan now</button>
+      <button id="reload" class="range-btn" type="button" title="Re-read configs/storage.json and configs/services.json from disk">Reload config</button>
+      <span id="reload-note" class="reload-note"></span>
     </div>
 
     <div class="storage-wrap">

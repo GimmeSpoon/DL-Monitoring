@@ -34,10 +34,22 @@ test('accounts: du fallback keys on the last path component', ()=>{
 test('accounts: strategy pins one method, sudo prefixes the privileged binary', ()=>{
 	const t = normalize({ type: 'accounts', roots: ['/home/'], sudo: true, strategy: 'du' }, 0);
 	const cmd = accountsCommand(t);
-	assert.match(cmd, /sudo -n du -sb "\/home"\/\*/);
+	assert.match(cmd, /sudo -n du -sB1 "\/home"\/\*/); // -B1: allocated, not apparent
 	assert.doesNotMatch(cmd, /repquota/);
+	assert.doesNotMatch(cmd, /du[^|]*2>\/dev\/null/);  // du's stderr must reach the status panel
 	assert.match(accountsCommand(normalize({ type: 'accounts', strategy: 'quota' }, 0)), /^echo @@QUOTA; repquota -a/);
-	assert.match(accountsCommand(normalize({ type: 'accounts' }, 0)), /repquota[\s\S]*du -sb/); // auto: try quota, else du
+	assert.match(accountsCommand(normalize({ type: 'accounts' }, 0)), /repquota[\s\S]*du -sB1/); // auto: try quota, else du
+});
+
+test('parseSized drops a value past 2^53 rather than poisoning the API', ()=>{
+	// du -b on a sparse file really does report ~64PiB; sqlite stores it, then
+	// refuses to hand it back as a JS number
+	assert.deepStrictEqual(parseSized(['72068691744390784\t/mnt/sparse', '4096\t/mnt/real']), [
+		{ name: '/mnt/real', bytes: 4096 },
+	]);
+	assert.deepStrictEqual(parseSized([`${Number.MAX_SAFE_INTEGER}\t/edge`]), [
+		{ name: '/edge', bytes: Number.MAX_SAFE_INTEGER },
+	]);
 });
 
 test('containers: -s and the inspect pass are only asked for when their layer is on', ()=>{
