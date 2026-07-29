@@ -305,7 +305,9 @@ world-readable data is counted, and the numbers quietly come out too low.
 The Storage page's **Scan targets** panel shows every target's last run,
 duration, entry count, and error. A target that has been failing for days is
 otherwise indistinguishable from one that found nothing. **Scan now** forces a
-pass for the selected scope instead of waiting for the interval.
+pass for the selected scope instead of waiting for the interval — it is the one
+button that measures anything, and can take minutes. **Reload config** only
+re-reads the JSON. Both report what they did in the line beside them.
 
 ### With no storage.json
 

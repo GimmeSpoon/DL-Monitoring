@@ -73,7 +73,15 @@
         }).join(''));
       }
 
-      function load(){ $.getJSON('/api/services').done((d)=>render(d.services || [])); }
+      // one status line for both buttons. `from` marks who wrote it, so the 10s
+      // poll can clear its own stale error without wiping a re-check's result
+      function note(msg, from){ $('#note').text(msg).data('from', from || ''); }
+
+      function load(){
+        $.getJSON('/api/services')
+          .done((d)=>{ if($('#note').data('from') === 'load') note(''); render(d.services || []); })
+          .fail((x)=>note(`could not load services: ${(x.responseJSON || {}).error || x.status}`, 'load'));
+      }
 
       // force an immediate backend re-check (the poller is otherwise ~20s), spin
       // the icon and lock the button until the fresh statuses come back
@@ -81,8 +89,14 @@
         const $b = $('#refresh');
         if($b.prop('disabled')) return;
         $b.addClass('spin').prop('disabled', true);
+        note('checking...');
         $.post('/api/services/check')
-          .done((d)=>render(d.services || []))
+          .done((d)=>{
+            const list = d.services || [];
+            render(list);
+            note(`checked ${list.length} services · ${list.filter((s)=>s.status === 'up').length} up`);
+          })
+          .fail((x)=>note(`check failed: ${(x.responseJSON || {}).error || x.status}`))
           .always(()=>$b.removeClass('spin').prop('disabled', false));
       }
 
@@ -93,14 +107,14 @@
         if($b.prop('disabled')) return;
         $b.addClass('spin').prop('disabled', true);
         $.post('/api/config/reload')
-          .done((r)=>$('#reload-note').text(`${r.services.services} services · ${r.services.connections} connections`))
-          .fail((x)=>$('#reload-note').text(`reload failed: ${(x.responseJSON || {}).error || x.status}`))
+          .done((r)=>note(`${r.services.services} services · ${r.services.connections} connections`))
+          .fail((x)=>note(`reload failed: ${(x.responseJSON || {}).error || x.status}`))
           .always(()=>{ $b.removeClass('spin').prop('disabled', false); load(); });
       }
 
       $(function(){
         $('#brand-mark').html(window.ICONS.signal);
-        $('#refresh').html(window.ICONS.refresh + 'Refresh').on('click', recheck);
+        $('#refresh').html(window.ICONS.refresh + 'Re-check').on('click', recheck);
         $('#reload').on('click', reloadConfig);
         $('#group-select').on('change', load);
         load();
@@ -120,9 +134,9 @@
 
     <div class="controls" id="controls">
       <label id="group-wrap">Group <select id="group-select"></select></label>
-      <button id="refresh" class="range-btn" type="button" title="Re-check all services now"></button>
+      <button id="refresh" class="range-btn" type="button" title="Check every service now instead of waiting for the interval"></button>
       <button id="reload" class="range-btn" type="button" title="Re-read configs/services.json and configs/storage.json from disk">Reload config</button>
-      <span id="reload-note" class="reload-note"></span>
+      <span id="note" class="status-note"></span>
     </div>
 
     <div class="storage-wrap" id="svc-wrap"></div>

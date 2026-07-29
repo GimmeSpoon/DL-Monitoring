@@ -529,15 +529,17 @@ body {
 .range-btn:hover { color: var(--text); }
 .range-btn.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
-/* services "Refresh" button: icon + label, spins while re-checking */
-#refresh { display: inline-flex; align-items: center; gap: 6px; }
-#refresh svg { width: 13px; height: 13px; }
-#refresh:disabled { opacity: 0.6; cursor: default; }
-#refresh.spin svg { animation: spin 0.8s linear infinite; }
+/* the act-now button each tab carries — Services "Re-check", Storage "Scan now":
+   icon + label, spins while the backend works */
+#refresh, #scan-now { display: inline-flex; align-items: center; gap: 6px; }
+#refresh svg, #scan-now svg { width: 13px; height: 13px; }
+#refresh:disabled, #scan-now:disabled { opacity: 0.6; cursor: default; }
+#refresh.spin svg, #scan-now.spin svg { animation: spin 0.8s linear infinite; }
 
-/* "Scan now" / "Reload config": no icon to spin, so busy is shown by dimming */
-#scan-now:disabled, #scan-now.spin, #reload:disabled, #reload.spin { opacity: 0.55; cursor: default; }
-.reload-note { font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
+/* "Reload config" has no icon to spin, so busy is shown by dimming */
+#reload:disabled, #reload.spin { opacity: 0.55; cursor: default; }
+/* shared by both action buttons on the Services and Storage tabs */
+.status-note { font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
 
 /* ---------- history charts ---------- */
 
@@ -873,7 +875,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
 	.meter-fill, .card { transition: none; }
-	.fan-ico, #refresh.spin svg { animation: none; }
+	.fan-ico, #refresh.spin svg, #scan-now.spin svg { animation: none; }
 }
 
 @media (max-width: 560px) {
