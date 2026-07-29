@@ -529,8 +529,8 @@ body {
 .range-btn:hover { color: var(--text); }
 .range-btn.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
-/* the act-now button each tab carries — Services "Re-check", Storage "Scan now":
-   icon + label, spins while the backend works */
+/* the "Scan now" button each tab carries: icon + label, spins while the backend
+   works. Services probes up/down in seconds, Storage walks du for minutes */
 #refresh, #scan-now { display: inline-flex; align-items: center; gap: 6px; }
 #refresh svg, #scan-now svg { width: 13px; height: 13px; }
 #refresh:disabled, #scan-now:disabled { opacity: 0.6; cursor: default; }
