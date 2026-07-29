@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-	normalize, accountsCommand, parseAccounts,
+	normalize, makeMatcher, accountsCommand, parseAccounts,
 	containersCommand, parseContainers, buildContainerEntries, humanBytes, parseSized,
 } = require('../lib/storage');
 
@@ -121,6 +121,48 @@ test('parseSized keeps paths with spaces and drops noise', ()=>{
 		{ name: '/data/my models', bytes: 4096 },
 		{ name: '/tmp', bytes: 10 },
 	]);
+});
+
+test('exclude patterns: exact name, glob, path prefix', ()=>{
+	const m = makeMatcher(['root', 'k8s_*', '/srv/shared']);
+	assert.ok(m('root'));
+	assert.ok(!m('rootish'));
+	assert.ok(m('k8s_pause_abc'));
+	assert.ok(m('/srv/shared'));
+	assert.ok(m('/srv/shared/datasets'));  // prefix covers everything under it
+	assert.ok(!m('/srv/shared-old'));      // ...but not a sibling with the same start
+	assert.ok(m('nope', '/srv/shared'));   // any value matching is a match
+	assert.ok(!makeMatcher([])('anything'));
+});
+
+test('exclude drops a shared mount from every container that mounts it', ()=>{
+	const t = normalize({ type: 'containers', exclude: ['/data/models', 'train-box'] }, 0);
+	const { containers } = parseContainers([
+		'@@PS',
+		'infer-api|12.3GB (virtual 5.6GB)|Up|img',
+		'train-box|340MB|Up|img',
+		'@@MOUNTS',
+		'/infer-api|bind;/data/models;/models|bind;/data/logs;/logs',
+		'/train-box|bind;/data/models;/mnt/models',
+	].join('\n'));
+
+	const kept = containers.filter((c)=>!t.excluded(c.name));
+	assert.deepStrictEqual(kept.map((c)=>c.name), ['infer-api']);
+	for(const c of kept) c.mounts = c.mounts.filter((m)=>!t.excludedMount(m.source, m.dest));
+	assert.deepStrictEqual(kept[0].mounts.map((m)=>m.source), ['/data/logs']);
+
+	// and the shared source never reaches the du, nor the container's total
+	const entries = buildContainerEntries(kept, { '/data/logs': 500 });
+	assert.strictEqual(entries.find((e)=>e.kind === 'container').bytes, 12.3e9 + 500);
+	assert.deepStrictEqual(entries.filter((e)=>e.kind === 'mount').map((e)=>e.name), ['/logs']);
+});
+
+test('normalize keeps the plumbing defaults when exclude is set', ()=>{
+	const t = normalize({ type: 'containers', exclude: ['/srv/shared'] }, 0);
+	assert.ok(t.excludedMount('/etc/localtime'));  // default list still applies
+	assert.ok(t.excludedMount('/srv/shared'));
+	assert.ok(!t.excluded('/etc/localtime'));      // ...but only to mounts
+	assert.deepStrictEqual(normalize({ type: 'accounts' }, 0).exclude, []);
 });
 
 test('normalize defaults scope to the connection and ids each target', ()=>{

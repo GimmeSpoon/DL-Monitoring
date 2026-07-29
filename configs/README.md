@@ -231,6 +231,45 @@ where each top-level directory counts as one account. Pin one method with
 | `connection` | `default` | Name from the `connections` block. |
 | `sudo` | `false` | Prefix `repquota` / `du` / the container engine with `sudo -n`. |
 | `everyHours` | `storageScanHours` (6) | Per-target interval. A cheap container listing can run hourly while a `du` walk stays at 6h. |
+| `exclude` | `[]` | Rows to drop. See below. |
+
+### Excluding rows
+
+Every row a target produces is discovered, not declared — whatever accounts the
+host has, whatever containers are running, whatever is mounted into them. So
+each target takes an `exclude` list to drop the ones you don't want:
+
+```json
+{ "type": "accounts", "roots": ["/home"], "exclude": ["root", "lost+found", "svc_*"] },
+{ "type": "containers", "exclude": ["/srv/shared", "k8s_*", "node-exporter"] }
+```
+
+A pattern is one of three things:
+
+| Pattern | Matches |
+|---|---|
+| `root` | that name exactly — `rootish` survives |
+| `k8s_*` | glob; `*` matches any run of characters |
+| `/srv/shared` | that path **and everything under it** — `/srv/shared/datasets` goes, `/srv/shared-old` stays |
+
+What it is matched against depends on the row: an account name, a container
+name, a path, a `command` label — and for a container mount, **either** its host
+source or its in-container destination, so `/srv/shared` and `/mnt/shared` both
+work.
+
+Excluding a container drops its mounts with it. Excluding a mount removes it
+from its container's total as well as from the list — and it happens *before*
+the `du`, so an excluded volume costs nothing to skip.
+
+**The shared-volume case.** One dataset volume mounted into eight containers is
+`du`'d eight times and charged to all eight, so the section total counts it
+eight times over. It is flagged `shared ×8` in the UI, but the honest fix is to
+exclude it from the `containers` target and measure it once on its own:
+
+```json
+{ "type": "containers", "exclude": ["/data/datasets"] },
+{ "type": "paths", "label": "Datasets", "paths": ["/data/datasets"] }
+```
 
 ### Container layers
 
@@ -249,10 +288,10 @@ where each top-level directory counts as one account. Pin one method with
 
 Plumbing mounts are skipped by default: `/proc`, `/sys`, `/dev`, `/run`,
 `/var/run`, `/etc`. Setting `excludeMounts` **replaces** that list, so include
-what you still want skipped. Entries match whole path prefixes — `/data` covers
-`/data/models` but not `/database`. A source mounted
-into two containers is charged to both and flagged `shared ×2` — there is no
-single owner to attribute it to.
+what you still want skipped — it exists to get one of those defaults back, not
+to hide your own volumes; that is what `exclude` is for, and the two are
+applied together. A source mounted into two containers is charged to both and
+flagged `shared ×2` — there is no single owner to attribute it to.
 
 ### Reading other people's data
 

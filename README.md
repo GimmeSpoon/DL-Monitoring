@@ -205,9 +205,21 @@ HOST=127.0.0.1 PORT=8080 npm start
   | `command` | Any command printing `<bytes>\t<label>` lines — the escape hatch | `command` |
 
   Every target also takes `"label"` (shown in the UI), `"sudo": true` (prefix the
-  privileged command with `sudo -n`), and `"everyHours"` to override the global
+  privileged command with `sudo -n`), `"everyHours"` to override the global
   scan interval — so a cheap container listing can run hourly while a `du` walk
-  stays at 6h. Each target's last run, duration, entry count and error are shown
+  stays at 6h — and `"exclude"` to drop rows from what the scan discovered:
+
+```json
+{ "type": "accounts", "roots": ["/home"], "exclude": ["root", "svc_*"] },
+{ "type": "containers", "exclude": ["/srv/shared", "k8s_*"] }
+```
+
+  A pattern is an exact name, a `*` glob, or a path that covers everything under
+  it. It is matched against the account/container/path name, and for a container
+  mount against its host source or its in-container destination. Excluding a
+  mount takes it out of its container's total too, and skips its `du` — the cure
+  for one shared volume being measured once per container that mounts it (pair
+  it with a `paths` target to still count it, once). Each target's last run, duration, entry count and error are shown
   in the page's **Scan targets** panel, and a **Scan now** button forces a pass.
 
   `containers` measures two layers, both on by default via

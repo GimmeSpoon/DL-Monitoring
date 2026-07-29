@@ -5,8 +5,8 @@
     "local": { "local": true }
   },
   "targets": [
-    { "scope": "server-a", "connection": "gpu-1-host", "type": "accounts", "roots": ["/home"], "sudo": true },
-    { "scope": "server-a", "connection": "gpu-1-host", "type": "containers", "sudo": true, "layers": ["writable", "mounts"], "everyHours": 2 },
+    { "scope": "server-a", "connection": "gpu-1-host", "type": "accounts", "roots": ["/home"], "sudo": true, "exclude": ["root", "lost+found"] },
+    { "scope": "server-a", "connection": "gpu-1-host", "type": "containers", "sudo": true, "layers": ["writable", "mounts"], "everyHours": 2, "exclude": ["/data/datasets", "k8s_*"] },
     { "scope": "server-a", "connection": "gpu-1-host", "type": "paths", "label": "Datasets", "paths": ["/data/datasets", "/data/models"] },
     { "scope": "infer-box", "connection": "infer-box", "type": "containers", "engine": "podman", "layers": ["writable"] },
     { "scope": "infer-box", "connection": "infer-box", "type": "accounts", "roots": ["/srv/users"], "strategy": "quota" },
