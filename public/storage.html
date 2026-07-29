@@ -43,18 +43,22 @@
 
       // a container expands to the storage mounted into it: destination, kind of
       // mount, and the host path the bytes were measured on
-      function container(c, max){
+      function container(c, max, note){
         const m = c.meta || {};
+        // the writable/mounted split lives in the body, not the summary: the value
+        // column is a fixed width shared with every other row's, and a two-part
+        // breakdown does not fit it
         const parts = [];
-        if(m.writable) parts.push(`rw ${fmt(m.writable)}`);
-        if(m.mounted) parts.push(`mnt ${fmt(m.mounted)}`);
+        if(m.writable) parts.push(`writable ${fmt(m.writable)}`);
+        if(m.mounted) parts.push(`mounted ${fmt(m.mounted)}`);
         const mounts = (c.mounts || []).slice().sort((a, b)=>b.bytes - a.bytes);
         const rows = mounts.map((mt)=>`<div class="mnt-row">
             <span class="mnt-dest" title="${esc(mt.name)}">${esc(mt.name)}</span>
             <span class="mnt-src" title="${esc((mt.meta || {}).source)}">${esc((mt.meta || {}).type || '')} ${esc((mt.meta || {}).source || '')}${(mt.meta || {}).shared > 1 ? ` · shared ×${(mt.meta || {}).shared}` : ''}</span>
             <span class="mnt-val">${fmt(mt.bytes)}</span>
           </div>`).join('');
-        const info = [m.image ? `<div class="mnt-note">image ${esc(m.image)}</div>` : '',
+        const info = [parts.length ? `<div class="mnt-note">${parts.join(' + ')}</div>` : '',
+          m.image ? `<div class="mnt-note">image ${esc(m.image)}</div>` : '',
           m.status ? `<div class="mnt-note">${esc(m.status)}</div>` : ''].join('');
         const body = (rows || info)
           ? `<div class="cnt-mounts">${info}${rows || '<div class="mnt-note">No measured mounts (all excluded, or the mount layer is off).</div>'}</div>`
@@ -63,7 +67,7 @@
           <summary class="acct-row">
             <span class="acct-name" title="${esc(c.name)}">${window.ICONS.box}${esc(c.name)}</span>
             <span class="acct-track"><span class="acct-fill" style="width:${max ? c.bytes / max * 100 : 0}%"></span></span>
-            <span class="acct-val">${fmt(c.bytes)}${parts.length ? ` <em>${parts.join(' + ')}</em>` : ''}</span>
+            <span class="acct-val">${fmt(c.bytes)}${note ? ` <em>${esc(note)}</em>` : ''}</span>
           </summary>${body}
         </details>`;
       }
@@ -89,10 +93,10 @@
         const max = Math.max(...rows.map((r)=>r.bytes || 0), 1);
         $(`#${sec.id}-empty`).empty();
         $(`#${sec.id}-list`).html(rows.map((r)=>{
-          if(r.kind === 'container') return container(r, max);
-          const share = total ? (r.bytes / total * 100) : 0;
+          const share = `${(total ? r.bytes / total * 100 : 0).toFixed(1)}%`;
+          if(r.kind === 'container') return container(r, max, share);
           const icon = r.kind === 'account' ? window.ICONS.user : window.ICONS.folder;
-          return bar(icon, r.name, r.bytes, max, `${share.toFixed(1)}%`);
+          return bar(icon, r.name, r.bytes, max, share);
         }).join(''));
         $(`#${sec.id}-meta`).text(`${rows.length} · ${fmt(total)} · scanned ${fmtTime(maxTs(rows))}`);
       }
