@@ -1,0 +1,207 @@
+<html lang="en">
+  <head>
+    <title>Server Monitor — Alarms</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="index.css">
+    <script src="vendor/jquery-3.6.3.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+      const esc = (x)=>$('<i>').text(x == null ? '' : x).html();
+      const fmtTime = (ts)=>ts ? new Date(ts * 1000).toLocaleString() : '';
+      const SEV = { critical: 'type-bad', warning: 'type-warn', info: 'type-info' };
+
+      // "3h 20m" from an epoch-seconds start
+      function since(ts){
+        const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+        if(s < 90) return `${s}s`;
+        if(s < 5400) return `${Math.round(s / 60)}m`;
+        return `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`;
+      }
+
+      // what a rule watches, in one column: a metric rule is its threshold, an
+      // event rule is the event names it subscribes to
+      function trigger(r){
+        if(r.type === 'metric'){
+          const bound = r.above != null ? `above ${r.above}` : (r.below != null ? `below ${r.below}` : '');
+          const held = r.for_minutes ? ` for ${r.for_minutes}m` : '';
+          return `${esc(r.metric)} ${esc(bound)}${held}`;
+        }
+        if(r.type === 'event') return (r.events || []).map(esc).join(', ');
+        if(r.type === 'storage') return 'storage entry over its limit';
+        if(r.type === 'gpu_session') return 'GPU session longer than its limit';
+        return esc(r.type);
+      }
+
+      function ruleState(r){
+        if(r.snoozed_until) return `<span class="event-type type-unknown">snoozed ${esc(fmtTime(r.snoozed_until))}</span>`;
+        if(!r.enabled) return '<span class="event-type type-unknown">off</span>';
+        if(r.firing) return `<span class="event-type type-bad">firing ${r.firing}</span>`;
+        if(r.pending) return `<span class="event-type type-warn">pending ${r.pending}</span>`;
+        return '<span class="event-type type-ok">ok</span>';
+      }
+
+      function renderActive(d){
+        const list = d.active || [];
+        if(!list.length){
+          $('#active-wrap').html('<section class="panel"><h3>Firing now <span>nothing</span></h3>'
+            + '<div class="storage-note">Nothing is alarming. Rules below are what would fire.</div></section>');
+          return;
+        }
+        const rows = list.map((a)=>`<div class="svc-row">
+          <span class="event-type ${SEV[a.severity] || 'type-warn'}">${esc(a.severity)}</span>
+          <div class="svc-main">
+            <div class="svc-head">
+              <span class="svc-name">${esc(a.name)}</span>
+              ${a.server ? `<span class="event-type svc-type">${esc(a.server)}</span>` : ''}
+              ${a.subject ? `<span class="event-type svc-type">${esc(a.subject)}</span>` : ''}
+            </div>
+            <div class="svc-detail">${esc(a.message)}</div>
+          </div>
+          <span class="svc-when">for ${since(a.since)}</span>
+        </div>`).join('');
+        $('#active-wrap').html(`<section class="panel"><h3>Firing now <span>${list.length}</span></h3>${rows}</section>`);
+      }
+
+      function renderRules(d){
+        const rules = d.rules || [];
+        if(!rules.length){
+          $('#rules-wrap').html('<section class="panel"><h3>Rules</h3><div class="storage-note">'
+            + 'No alarm rules. Copy <code>configs/alarms.example.json</code> to <code>configs/alarms.json</code>, '
+            + 'set a Slack webhook URL, then press Reload config.</div></section>');
+          return;
+        }
+        const rows = rules.map((r)=>`<tr data-id="${esc(r.id)}">
+          <td><input type="checkbox" class="rule-on" ${r.enabled ? 'checked' : ''} title="Enable or disable this rule (saved to alarms.json)"></td>
+          <td class="rule-name">${esc(r.name)}<div class="rule-id">${esc(r.id)}</div></td>
+          <td>${esc(r.type)}</td>
+          <td class="rule-trigger">${trigger(r)}</td>
+          <td><span class="event-type ${SEV[r.severity] || 'type-warn'}">${esc(r.severity)}</span></td>
+          <td class="rule-ch">${(r.channels || []).map(esc).join(', ') || '<em>all</em>'}</td>
+          <td>${ruleState(r)}</td>
+          <td><button class="range-btn rule-snooze" type="button">${r.snoozed_until ? 'Wake' : 'Snooze 1h'}</button></td>
+        </tr>`).join('');
+        $('#rules-wrap').html(`<section class="panel"><h3>Rules <span>${rules.filter((r)=>r.enabled).length}/${rules.length} on</span></h3>
+          <table class="log-table"><thead><tr>
+            <th>On</th><th>Rule</th><th>Type</th><th>Trigger</th><th>Severity</th><th>Channels</th><th>State</th><th></th>
+          </tr></thead><tbody>${rows}</tbody></table></section>`);
+      }
+
+      function renderChannels(d){
+        const chs = d.channels || [];
+        const body = chs.length
+          ? `<table class="log-table"><thead><tr><th>Channel</th><th>Type</th><th>Target</th><th>Webhook</th><th>Min severity</th><th></th></tr></thead><tbody>`
+            + chs.map((c)=>`<tr data-name="${esc(c.name)}">
+                <td class="rule-name">${esc(c.name)}</td>
+                <td>${esc(c.type)}</td>
+                <td>${esc(c.target || '')}</td>
+                <td>${c.configured
+                  ? `<span class="event-type type-ok">set</span> <span class="rule-id">${esc(c.source)}</span>`
+                  : `<span class="event-type type-bad">missing</span> <span class="rule-id">${esc(c.source)}</span>`}</td>
+                <td>${esc(c.minSeverity)}</td>
+                <td><button class="range-btn ch-test" type="button" ${c.configured && c.enabled ? '' : 'disabled'}>Send test</button></td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<div class="storage-note">No channels. Add one under <code>"channels"</code> in <code>configs/alarms.json</code> — a Slack incoming-webhook URL is all it takes.</div>';
+        $('#ch-wrap').html(`<section class="panel"><h3>Channels <span>${chs.length}</span></h3>${body}</section>`);
+      }
+
+      function render(d){
+        renderActive(d);
+        renderRules(d);
+        renderChannels(d);
+        // the global snooze is the one control whose state lives outside a row
+        $('#muted').text(d.muted_until ? `all alarms snoozed until ${fmtTime(d.muted_until)}` : '');
+        if(d.last_error) note(`last delivery problem — ${d.last_error}`, 'load');
+        else if($('#note').data('from') === 'load') note('');
+      }
+
+      function note(msg, from){ $('#note').text(msg).data('from', from || ''); }
+
+      function load(){
+        $.getJSON('/api/alarms')
+          .done(render)
+          .fail((x)=>note(`could not load alarms: ${(x.responseJSON || {}).error || x.status}`, 'load'));
+      }
+
+      // every mutation returns the fresh status, so the page re-renders from the
+      // server's answer rather than guessing what the change did
+      function post(url, body, ok){
+        return $.ajax({ url, method: 'POST', contentType: 'application/json', data: JSON.stringify(body || {}) })
+          .done((d)=>{ render(d); if(ok) note(ok); })
+          .fail((x)=>note(`${(x.responseJSON || {}).error || x.status}`));
+      }
+
+      $(function(){
+        $('#brand-mark').html(window.ICONS.signal);
+        $('#reload').on('click', function(){
+          const $b = $(this);
+          if($b.prop('disabled')) return;
+          $b.addClass('spin').prop('disabled', true);
+          $.post('/api/config/reload')
+            .done((r)=>note(`${r.alarms.rules} rules · ${r.alarms.channels} channels`))
+            .fail((x)=>note(`reload failed: ${(x.responseJSON || {}).error || x.status}`))
+            .always(()=>{ $b.removeClass('spin').prop('disabled', false); load(); });
+        });
+
+        $('#mute-all').on('change', function(){
+          const m = Number($(this).val()) || 0;
+          post('/api/alarms/mute', { minutes: m }, m ? `all alarms snoozed for ${m} min` : 'snooze lifted');
+        });
+
+        // delegated: the tables are re-rendered on every poll
+        $('#rules-wrap').on('change', '.rule-on', function(){
+          const id = $(this).closest('tr').data('id');
+          post(`/api/alarms/rule/${encodeURIComponent(id)}`, { enabled: $(this).is(':checked') },
+            `${id} ${$(this).is(':checked') ? 'enabled' : 'disabled'} (saved to alarms.json)`);
+        });
+        $('#rules-wrap').on('click', '.rule-snooze', function(){
+          const id = $(this).closest('tr').data('id');
+          const waking = $(this).text() === 'Wake';
+          post(`/api/alarms/rule/${encodeURIComponent(id)}`, { snoozeMinutes: waking ? 0 : 60 },
+            `${id} ${waking ? 'un-snoozed' : 'snoozed for 60 min'}`);
+        });
+        $('#ch-wrap').on('click', '.ch-test', function(){
+          const name = $(this).closest('tr').data('name');
+          const $b = $(this).prop('disabled', true);
+          note(`sending test to ${name}...`);
+          $.ajax({ url: '/api/alarms/test', method: 'POST', contentType: 'application/json', data: JSON.stringify({ channel: name }) })
+            .done((d)=>note(d.sent ? `test delivered to ${name} (HTTP ${d.status})` : `not sent: ${d.reason}`))
+            .fail((x)=>note(`test failed: ${(x.responseJSON || {}).error || x.status}`))
+            .always(()=>$b.prop('disabled', false));
+        });
+
+        load();
+        setInterval(load, 10000);
+      });
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/"><span id="brand-mark"></span> Server <span>Monitor</span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="topbar-right">
+        <button id="skin" class="icon-btn" type="button" aria-label="Toggle theme"></button>
+        <a href="#" id="logout" class="logout">Logout</a>
+      </div>
+    </header>
+
+    <div class="controls" id="controls">
+      <label>Snooze all
+        <select id="mute-all">
+          <option value="0">off</option>
+          <option value="30">30 min</option>
+          <option value="60">1 hour</option>
+          <option value="240">4 hours</option>
+          <option value="1440">24 hours</option>
+        </select>
+      </label>
+      <button id="reload" class="range-btn" type="button" title="Re-read configs/alarms.json (and services/storage) from disk">Reload config</button>
+      <span id="muted" class="status-note"></span>
+      <span id="note" class="status-note"></span>
+    </div>
+
+    <div class="storage-wrap" id="active-wrap"></div>
+    <div class="storage-wrap" id="rules-wrap"></div>
+    <div class="storage-wrap" id="ch-wrap"></div>
+  </body>
+</html>

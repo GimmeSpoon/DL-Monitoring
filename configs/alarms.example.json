@@ -1,0 +1,138 @@
+{
+  "enabled": true,
+  "origin": "gpu-cluster",
+  "metricIntervalSeconds": 30,
+  "slowIntervalMinutes": 10,
+
+  "channels": {
+    "ops-slack": {
+      "type": "slack",
+      "urlEnv": "SLACK_WEBHOOK_URL",
+      "channel": "#gpu-alerts",
+      "username": "Server Monitor",
+      "iconEmoji": ":satellite:",
+      "minSeverity": "info"
+    },
+    "pager-slack": {
+      "type": "slack",
+      "url": "https://hooks.slack.com/services/T000/B000/replace-me",
+      "channel": "#oncall",
+      "minSeverity": "critical",
+      "enabled": false
+    },
+    "internal": {
+      "type": "webhook",
+      "url": "https://automation.example.com/hooks/server-monitor",
+      "headers": { "Authorization": "Bearer replace-me" },
+      "enabled": false
+    }
+  },
+
+  "defaults": {
+    "channels": ["ops-slack"],
+    "notifyResolve": true,
+    "repeatMinutes": 0,
+    "clearMinutes": 1
+  },
+
+  "rules": [
+    {
+      "id": "server-offline",
+      "name": "Server offline",
+      "type": "metric",
+      "metric": "server.offlineMinutes",
+      "above": 5,
+      "severity": "critical",
+      "repeatMinutes": 60
+    },
+    {
+      "id": "service-down",
+      "name": "Service down",
+      "type": "event",
+      "events": ["service_down", "service_fail"],
+      "severity": "critical"
+    },
+    {
+      "id": "disk-nearly-full",
+      "name": "Filesystem nearly full",
+      "type": "metric",
+      "metric": "disk.usedPct",
+      "above": 90,
+      "forMinutes": 5,
+      "severity": "warning",
+      "repeatMinutes": 720
+    },
+    {
+      "id": "gpu-too-hot",
+      "name": "GPU too hot",
+      "type": "metric",
+      "metric": "gpu.temp",
+      "above": 85,
+      "forMinutes": 2,
+      "severity": "warning"
+    },
+    {
+      "id": "storage-scan-failed",
+      "name": "Storage scan failing",
+      "type": "event",
+      "events": ["storage_fail"],
+      "severity": "warning"
+    },
+    {
+      "id": "monitoring-stopped",
+      "name": "Monitoring stopped from the web UI",
+      "type": "event",
+      "events": ["kill"],
+      "severity": "critical",
+      "notifyResolve": false
+    },
+    {
+      "id": "memory-pressure",
+      "name": "Memory almost exhausted",
+      "type": "metric",
+      "metric": "mem.usedPct",
+      "above": 95,
+      "forMinutes": 10,
+      "severity": "warning",
+      "enabled": false
+    },
+    {
+      "id": "gpu-idle",
+      "name": "GPU idle for a day",
+      "type": "metric",
+      "metric": "gpu.idleMinutes",
+      "above": 1440,
+      "severity": "info",
+      "notifyResolve": false,
+      "enabled": false
+    },
+    {
+      "id": "account-over-quota",
+      "name": "Home directory over quota",
+      "type": "storage",
+      "kind": "account",
+      "aboveGiB": 1000,
+      "severity": "warning",
+      "repeatMinutes": 1440,
+      "enabled": false
+    },
+    {
+      "id": "long-gpu-session",
+      "name": "GPU held for two days",
+      "type": "gpu_session",
+      "longerThanHours": 48,
+      "severity": "info",
+      "notifyResolve": false,
+      "enabled": false
+    },
+    {
+      "id": "failed-logins",
+      "name": "Failed web logins",
+      "type": "event",
+      "events": ["login_fail"],
+      "severity": "info",
+      "repeatMinutes": 15,
+      "enabled": false
+    }
+  ]
+}

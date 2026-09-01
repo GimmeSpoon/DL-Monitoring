@@ -8,6 +8,7 @@ Everything the monitor reads lives in this directory.
 | `servers.json` | The GPU servers to monitor (the 1s poll, dashboard, history) | **Fatal** — the server won't start |
 | `services.json` | Service up/down checks (`/services.html`) | Tab is empty, nothing checked |
 | `storage.json` | Storage scans (`/storage.html`) | Falls back to the legacy per-server account scan |
+| `alarms.json` | Alarms and where to send them — Slack, any webhook (`/alarms.html`) | Nothing is alarmed, nothing is sent |
 
 Each `*.example.json` here is a working template — copy it, drop the `.example`:
 
@@ -30,21 +31,25 @@ The three feature configs are deliberately not equally strict:
 
 * `servers.json` — invalid JSON or a missing file **throws at startup**. It is
   the whole point of the process; failing loudly beats monitoring nothing.
-* `services.json` / `storage.json` — a missing, blank, or invalid file logs one
-  line and **disables just that feature**. A typo in a service definition must
-  never take monitoring down with it.
+* `services.json` / `storage.json` / `alarms.json` — a missing, blank, or invalid
+  file logs one line and **disables just that feature**. A typo in a service or
+  alarm definition must never take monitoring down with it.
 * `config.json` — invalid JSON **throws** rather than being reset, so a bad edit
   can't silently wipe your web password and session secret.
 
 ### Applying an edit
 
-`services.json` and `storage.json` reload at runtime: press **Reload config** on
-either the Services or the Storage tab (both call `POST /api/config/reload`, and
-both files are re-read together). The old checker and scanner are stopped, their
+`services.json`, `storage.json` and `alarms.json` reload at runtime: press
+**Reload config** on the Services, Storage or Alarms tab (all call
+`POST /api/config/reload`, and all three files are re-read together). The old checker and scanner are stopped, their
 SSH pools disposed, and fresh ones built from disk — so added, changed, and
 removed entries all take effect, and a scan runs a couple of seconds later. A
 pass already in flight is allowed to finish. The reload is logged as a
 `config_reload` event.
+
+Alarms additionally survive the swap: a rule that was already firing is carried
+across the reload, so editing one rule doesn't re-announce every problem that was
+already open.
 
 Nothing is watched automatically. A file watcher would fire on the half-written
 file an editor leaves mid-save, so the trigger is deliberate.
@@ -324,6 +329,214 @@ Those three are ignored the moment `storage.json` exists — except
 
 ---
 
+## alarms.json
+
+Optional. It answers two questions: **what is worth waking someone for**, and
+**where does that message go**. Nothing is alarmed until a rule says so — an
+empty or missing file means the feature is simply off.
+
+```bash
+cp configs/alarms.example.json configs/alarms.json
+```
+
+```json
+{
+  "enabled": true,
+  "origin": "gpu-cluster",
+  "channels": {
+    "ops-slack": { "type": "slack", "urlEnv": "SLACK_WEBHOOK_URL", "channel": "#gpu-alerts" }
+  },
+  "defaults": { "channels": ["ops-slack"], "notifyResolve": true },
+  "rules": [
+    { "id": "server-offline", "name": "Server offline", "type": "metric",
+      "metric": "server.offlineMinutes", "above": 5, "severity": "critical" },
+    { "id": "service-down", "name": "Service down", "type": "event",
+      "events": ["service_down", "service_fail"], "severity": "critical" }
+  ]
+}
+```
+
+### Channels
+
+A channel is one delivery target. `type` decides the body shape; everything else
+is per-service.
+
+| Field | Meaning |
+|---|---|
+| `type` | `slack` (incoming webhook), `webhook` (raw JSON POST), `discord` |
+| `url` | The webhook URL |
+| `urlEnv` | Name of an env var holding the URL instead — keeps the secret out of the file |
+| `channel`, `username`, `iconEmoji` | Slack overrides, sent only when set (a modern Slack app ignores them unless the webhook allows overrides) |
+| `headers` | Extra request headers, e.g. `{"Authorization": "Bearer ..."}` for an internal endpoint |
+| `minSeverity` | `info` (default), `warning`, `critical` — a paging channel takes only criticals while a chat channel takes everything |
+| `enabled` | `false` parks a channel without deleting it |
+| `timeoutMs` | Request timeout, default 10000 |
+
+**Getting a Slack URL:** create an app at `api.slack.com/apps` → *Incoming
+Webhooks* → *Add New Webhook to Workspace*, pick the channel, copy the
+`https://hooks.slack.com/services/...` URL. That URL is a bearer credential —
+anyone holding it can post to the channel. Prefer `urlEnv`:
+
+```bash
+export SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T000/B000/xxxx'
+```
+
+The URL is never sent to the browser. The Alarms tab shows only whether a
+channel is configured and where its URL came from.
+
+For anything that isn't Slack or Discord, use `"type": "webhook"`: the alarm
+object is POSTed as-is, so the receiver can route on `severity`, `ruleId`,
+`server`, `value` and `threshold` rather than parsing prose.
+
+### Rule types
+
+Every rule needs `type`; `id` (or `name`) identifies it in the UI and in the
+file. All four types share the fields in [Fields on any rule](#fields-on-any-rule).
+
+**`event`** — matches the event log as it is written. Edge-triggered.
+
+```json
+{ "id": "service-down", "type": "event", "events": ["service_down", "service_fail"],
+  "servers": ["gpu-*"], "match": "postgres", "severity": "critical" }
+```
+
+| Field | Meaning |
+|---|---|
+| `events` | Event types to fire on; `["*"]` matches every event |
+| `resolveEvents` | Events that clear it. Defaults to the natural pair: `ssh_fail`/`ssh_disconnect` → `ssh_connect`, `service_down`/`service_fail` → `service_up`, `storage_fail` → `storage_scan` |
+| `servers` | Filter on the event's server/group; exact names or globs |
+| `match` | Case-insensitive regex the message must contain |
+
+Alarmable event types: `ssh_connect`, `ssh_disconnect`, `ssh_fail`, `service_up`,
+`service_down`, `service_fail`, `storage_scan`, `storage_fail`, `login_ok`,
+`login_fail`, `kill`, `revive`, `config_reload`, `server_start`.
+
+A rule whose events have no recovery pair (`login_fail`, `kill`) is a **one-shot
+notice**: it announces, then stays quiet for `repeatMinutes` (default 5) so a
+burst of failed logins is one message rather than fifty.
+
+**`metric`** — evaluated against the live poll every `metricIntervalSeconds`
+(default 30). Level-triggered.
+
+```json
+{ "id": "disk-nearly-full", "type": "metric", "metric": "disk.usedPct",
+  "above": 90, "forMinutes": 5, "subjects": ["/", "/data"], "severity": "warning" }
+```
+
+| Field | Meaning |
+|---|---|
+| `metric` | One of the metrics below |
+| `above` / `below` | The threshold. One of the two |
+| `forMinutes` | Must hold this long before firing — how a one-second spike is kept out of Slack |
+| `servers` | Which servers to watch (names or globs; default all) |
+| `subjects` | Which rows within a server: mount paths for `disk.*`, `gpu0`/`gpu1` for `gpu.*` (`mounts` and `gpus` are accepted as aliases) |
+
+| Metric | Unit | What it is |
+|---|---|---|
+| `server.offlineMinutes` | min | How long a server has been unreachable. **The one to start with** |
+| `disk.usedPct` / `disk.freeGiB` | % / GiB | Per filesystem (`subject` is the mount) |
+| `cpu.util` | % | CPU utilisation |
+| `cpu.loadPerCore` | ratio | load1 ÷ cores — comparable across differently-sized boxes |
+| `mem.usedPct` | % | RAM used |
+| `net.rxMBps` / `net.txMBps` | MB/s | Network throughput |
+| `gpu.temp` | C | GPU temperature (`subject` is `gpu0`, `gpu1`, …) |
+| `gpu.util` | % | GPU utilisation |
+| `gpu.memPct` / `gpu.memUsedGiB` | % / GiB | GPU memory |
+| `gpu.power` | W | Power draw |
+| `gpu.fan` | % | Fan speed |
+| `gpu.procs` | count | Compute processes on the GPU — `"below": 1` means "nobody is using it" |
+| `gpu.idleMinutes` | min | How long since a compute process was last seen on it |
+
+An **offline server contributes only `server.offlineMinutes`**. The last reading
+before it died proves nothing about the present, so it can neither fire nor clear
+any other metric.
+
+**`storage`** — checked against the latest storage scan every
+`slowIntervalMinutes` (default 10).
+
+```json
+{ "id": "account-over-quota", "type": "storage", "kind": "account",
+  "aboveGiB": 1000, "scopes": ["server-a"], "names": ["*"], "severity": "warning" }
+```
+
+`kind` is `account`, `container` or `path` (omit for all); `aboveGiB` is the
+limit; `scopes` and `names` filter by scope and entry name.
+
+**`gpu_session`** — open GPU sessions from the usage log, same slow interval.
+
+```json
+{ "id": "long-gpu-session", "type": "gpu_session", "longerThanHours": 48,
+  "users": ["*"], "severity": "info", "notifyResolve": false }
+```
+
+### Fields on any rule
+
+| Field | Default | Meaning |
+|---|---|---|
+| `id` | the `name` | Stable identifier — the UI toggle writes back to this rule |
+| `name` | the `id` | What the message is titled |
+| `enabled` | `true` | `false` parks the rule; the Alarms tab toggles this and saves it here |
+| `severity` | `warning` | `info` / `warning` / `critical`. Sets the Slack colour and picks which channels take it |
+| `channels` | `defaults.channels` | Which channels this rule delivers to. Empty means every channel |
+| `forMinutes` | `0` | How long the condition must hold before firing |
+| `clearMinutes` | `1` | How long it must be clear before resolving (anti-flap). A recovery *event* ignores this — it is a statement, not a sample |
+| `repeatMinutes` | `0` | Re-send while still firing. `0` = announce once and stay quiet until it clears |
+| `notifyResolve` | `true` | Whether a "resolved" message follows |
+
+`defaults` sets any of these for every rule at once.
+
+### What a message looks like
+
+Firing and resolving are separate messages. The Slack `text` line carries the
+whole point — severity, rule, server, row — because that is what a phone
+notification shows; the coloured attachment carries the detail.
+
+```
+:rotating_light: [CRITICAL] Service down — web nginx
+  Service down
+  service_down: nginx: down (not running)
+  Server: web    Where: nginx    For: 12m
+```
+
+### It notifies on the transition, not on the observation
+
+This is the part that decides whether the channel stays readable. `ssh_fail`
+repeats every 10 seconds while a box is down, and the metric pass runs every 30
+seconds. Each rule keeps per-subject state, so:
+
+* a firing alarm notifies **once**, and again only if `repeatMinutes` says so;
+* one service recovering resolves **only that service**, not everything in the group;
+* a subject that disappears (unmounted filesystem, deleted container) resolves as
+  *no longer reported*, rather than firing forever;
+* a delivery failure is logged as `alarm_error` and never stops the next channel,
+  the next rule, or the monitoring itself.
+
+### Runtime control
+
+The Alarms tab (`/alarms.html`) is live, and everything on it applies without a
+restart:
+
+| Control | Effect | Durable? |
+|---|---|---|
+| Rule checkbox | Enable/disable one rule | **Yes** — written back to `alarms.json` |
+| Snooze 1h (per rule) | Keeps evaluating, sends nothing | No — a snooze that outlived a restart would silence a rule after everyone forgot |
+| Snooze all | Same, for every rule (a maintenance window) | No |
+| Send test | Posts a test message to one channel | — |
+| Reload config | Re-reads the file | — |
+
+Alarm activity is in the event log under `alarm_fire`, `alarm_resolve`,
+`alarm_error`, `alarm_muted`, `alarm_config` and `alarm_test`.
+
+### Checking it works
+
+1. Alarms tab → **Send test** next to the channel. A message should land in
+   Slack within a second; failures print the HTTP status in the status line.
+2. For a real end-to-end check, add a rule that is deliberately true — e.g.
+   `disk.usedPct` `"above": 1` — press **Reload config**, watch it fire, then set
+   the threshold back and reload again to watch it resolve.
+
+---
+
 ## Recipes
 
 **Watch a box you don't monitor.** Give `storage.json` (or `services.json`) a
@@ -351,5 +564,10 @@ unprivileged.
 | Storage account totals far too low | The scan account can't read other users' files — `"sudo": true` |
 | Container target reports `command not found` | No docker on that connection, or `sudo -n` isn't permitted for it |
 | A storage section is missing entirely | No target of that type for the selected scope — the page only draws sections something feeds |
-| Edits did nothing | `services.json` / `storage.json` need **Reload config**; `servers.json` / `config.json` need a restart |
+| Edits did nothing | `services.json` / `storage.json` / `alarms.json` need **Reload config**; `servers.json` / `config.json` need a restart |
+| Alarms tab says no rules | No `configs/alarms.json`, or it failed to parse (one line in the log names the file) |
+| Test message fails with HTTP 403/404 | The Slack webhook URL is wrong, revoked, or the app was removed from the channel |
+| Channel shows **missing** | `urlEnv` names an env var the service doesn't have — export it in the unit/shell that starts the monitor |
+| An alarm never resolves | Its trigger has no recovery pair; give the rule an explicit `resolveEvents`, or use a `metric` rule, which clears itself |
+| Too many messages | Raise `forMinutes` (spikes), set `repeatMinutes: 0` (repeats), or `notifyResolve: false` (recovery notices) |
 | A scan reports 0 entries and looks fine | It isn't fine — check the target's error. A scan that measures nothing *and* writes to stderr is reported as failed. |

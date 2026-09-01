@@ -14,6 +14,8 @@ shared-password login.
 * Badass looking HTML pages. It will motivate your will of experiments.
 * History charts, event log, and per-user GPU usage log stored in SQLite
   (no database server needed — uses Node's built-in `node:sqlite`).
+* Alarms that reach you where you already are: a Slack webhook (or any webhook)
+  gets a message when a server drops, a service dies, or a disk fills up.
 * Easy to use.
 
 ### Cons
@@ -30,6 +32,7 @@ shared-password login.
 | `/` | Live dashboard: per-server SYSTEM row (CPU %, RAM, load, network) + per-GPU gauges, users, offline badges |
 | `/storage.html` | Per-server filesystems (size/used/free) plus whatever `configs/storage.json` measures: per-account usage, per-container usage with the storage mounted into each one, and arbitrary paths |
 | `/services.html` | Up/down of configured services (containers, tmux, supervisor, systemd, ports, HTTP, custom) grouped by label; independent of the monitored servers |
+| `/alarms.html` | What is alarming right now, every rule with a runtime on/off and snooze, and the notification channels |
 | `/history.html` | Charts over 1h-30d: CPU, RAM, network, GPU util/memory/temperature, disk usage |
 | `/logs.html` | EVENTS tab (connections, logins, errors, storage scans) and GPU USAGE tab (user sessions per GPU) |
 
@@ -286,6 +289,51 @@ HOST=127.0.0.1 PORT=8080 npm start
   socket belongs to the session owner (use `user:`/`sudo:`); supervisorctl socket
   access; `systemctl is-active` works unprivileged for system units. `port` needs
   `bash` + `timeout`, `http` needs `curl`.
+
+* **Alarms** (the `/alarms.html` tab) send a message to Slack — or any webhook —
+  when something is wrong. Configured in `configs/alarms.json` (gitignored; see
+  `configs/alarms.example.json`). Nothing is alarmed until a rule says so:
+
+```json
+{
+  "channels": {
+    "ops-slack": { "type": "slack", "urlEnv": "SLACK_WEBHOOK_URL", "channel": "#gpu-alerts" }
+  },
+  "defaults": { "channels": ["ops-slack"] },
+  "rules": [
+    { "id": "server-offline", "name": "Server offline", "type": "metric",
+      "metric": "server.offlineMinutes", "above": 5, "severity": "critical" },
+    { "id": "service-down", "name": "Service down", "type": "event",
+      "events": ["service_down", "service_fail"], "severity": "critical" },
+    { "id": "disk-nearly-full", "name": "Filesystem nearly full", "type": "metric",
+      "metric": "disk.usedPct", "above": 90, "forMinutes": 5, "severity": "warning" }
+  ]
+}
+```
+
+  A rule is one of four types: `event` (anything in the event log — SSH drops,
+  service transitions, storage-scan failures, failed logins, monitoring being
+  stopped), `metric` (the live poll: disk, CPU, RAM, network, GPU temperature /
+  utilisation / memory / idle time, and how long a server has been offline),
+  `storage` (an account, container or path over a GiB limit), and `gpu_session`
+  (someone holding a GPU for too long). Each carries a `severity`
+  (`info`/`warning`/`critical`), which channels it goes to, and how patient it is:
+  `forMinutes` keeps a one-second spike out of Slack, `repeatMinutes` controls
+  re-sends, and `notifyResolve` decides whether a recovery message follows.
+
+  The point of the state machine behind it: an alarm notifies on the **transition**
+  into firing, not on every observation. `ssh_fail` repeats every 10s while a box
+  is down, so without it one dead server would be hundreds of messages an hour.
+  One service recovering resolves only that service; a subject that disappears
+  resolves rather than firing forever; a broken webhook is logged as `alarm_error`
+  and never affects monitoring.
+
+  A webhook URL is a bearer credential — prefer `"urlEnv"` and
+  `export SLACK_WEBHOOK_URL=...` over pasting it in the file. It is never sent to
+  the browser. On the tab you can toggle a rule (saved back to `alarms.json`),
+  snooze one rule or everything for a maintenance window (deliberately *not*
+  saved), and send a test message to prove a channel works. Absent `alarms.json`
+  ⇒ nothing is alarmed and nothing is sent.
 
 * Poll/flush intervals: `lib/config.js`.
 * Metrics are aggregated to one sample per minute in `data/monitor.db`;

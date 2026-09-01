@@ -33,7 +33,7 @@ $(function(){
 
 	const here = window.location.pathname;
 	const link = (href, label)=>`<a href="${href}" class="${here === href ? 'active' : ''}">${label}</a>`;
-	$('#nav').html(link('/', 'Dashboard') + link('/storage.html', 'Storage') + link('/services.html', 'Services') + link('/history.html', 'History') + link('/logs.html', 'Logs'));
+	$('#nav').html(link('/', 'Dashboard') + link('/storage.html', 'Storage') + link('/services.html', 'Services') + link('/alarms.html', 'Alarms') + link('/history.html', 'History') + link('/logs.html', 'Logs'));
 
 	$('#logout').on('click', (evnt)=>{
 		evnt.preventDefault();
