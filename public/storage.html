@@ -72,6 +72,18 @@
         </details>`;
       }
 
+      // one group's rows; shares and bar scale are relative to that group
+      function rowsHtml(rows){
+        const total = sum(rows);
+        const max = Math.max(...rows.map((r)=>r.bytes || 0), 1);
+        return rows.map((r)=>{
+          const share = `${(total ? r.bytes / total * 100 : 0).toFixed(1)}%`;
+          if(r.kind === 'container') return container(r, max, share);
+          const icon = r.kind === 'account' ? window.ICONS.user : window.ICONS.folder;
+          return bar(icon, r.name, r.bytes, max, share);
+        }).join('');
+      }
+
       function renderSection(sec, d){
         const rows = sec.kinds.flatMap((k)=>(d.kinds || {})[k] || []);
         const targets = (d.targets || []).filter((t)=>sec.types.includes(t.type));
@@ -90,15 +102,28 @@
         }
 
         const total = sum(rows);
-        const max = Math.max(...rows.map((r)=>r.bytes || 0), 1);
         // rows outlive a failed scan, so say so — otherwise the last good numbers read as current
         $(`#${sec.id}-empty`).text(failing ? `Last scan failed: ${failing.error} — showing the last successful scan.` : '');
-        $(`#${sec.id}-list`).html(rows.map((r)=>{
-          const share = `${(total ? r.bytes / total * 100 : 0).toFixed(1)}%`;
-          if(r.kind === 'container') return container(r, max, share);
-          const icon = r.kind === 'account' ? window.ICONS.user : window.ICONS.folder;
-          return bar(icon, r.name, r.bytes, max, share);
-        }).join(''));
+
+        // A section holds one kind, but a kind can come from several targets — two
+        // `command` targets both produce "custom". Keep each target's rows together
+        // under their own label and sub-total instead of interleaving them, and
+        // scale the bars within the group so two targets measuring very different
+        // things stay readable.
+        const grouped = new Set();
+        const groups = [];
+        for(const t of targets){
+          const rs = rows.filter((r)=>r.target === t.id);
+          if(!rs.length) continue;
+          rs.forEach((r)=>grouped.add(r));
+          groups.push({ label: t.label, rows: rs });
+        }
+        const loose = rows.filter((r)=>!grouped.has(r));
+        if(loose.length) groups.push({ label: null, rows: loose });
+
+        $(`#${sec.id}-list`).html(groups.length > 1
+          ? groups.map((g)=>`<div class="storage-note"><strong>${esc(g.label || 'earlier scan')}</strong> · ${g.rows.length} · ${fmt(sum(g.rows))}</div>${rowsHtml(g.rows)}`).join('')
+          : rowsHtml(rows));
         $(`#${sec.id}-meta`).text(`${rows.length} · ${fmt(total)} · scanned ${fmtTime(maxTs(rows))}`);
       }
 
