@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
 	normalize, makeMatcher, accountsCommand, parseAccounts,
-	containersCommand, parseContainers, buildContainerEntries, humanBytes, parseSized,
+	containersCommand, parseContainers, buildContainerEntries, humanBytes, parseSized, targetKinds,
 } = require('../lib/storage');
 
 test('accounts: quota output wins over du', ()=>{
@@ -171,4 +171,15 @@ test('normalize defaults scope to the connection and ids each target', ()=>{
 	assert.strictEqual(t.id, 'gpu-1/paths#2');
 	assert.strictEqual(t.label, 'paths');
 	assert.strictEqual(normalize({ type: 'accounts' }, 0).roots[0], '/home');
+});
+
+test('targetKinds: a target only claims the kinds it still produces', ()=>{
+	const kinds = (def)=>targetKinds(normalize(def, 0));
+	assert.deepStrictEqual(kinds({ type: 'accounts' }), ['account']);
+	assert.deepStrictEqual(kinds({ type: 'paths', paths: ['/data'] }), ['path']);
+	assert.deepStrictEqual(kinds({ type: 'command', command: 'du -sb /x' }), ['custom']);
+	// dropping the mount layer stops the target claiming mount rows, so the ones
+	// its last scan left behind are no longer served as current
+	assert.deepStrictEqual(kinds({ type: 'containers' }), ['container', 'mount']);
+	assert.deepStrictEqual(kinds({ type: 'containers', layers: ['writable'] }), ['container']);
 });

@@ -79,8 +79,8 @@
         if(!rows.length && !targets.length){ $box.hide(); return; }
         $box.show();
 
+        const failing = targets.find((t)=>t.ok === false);
         if(!rows.length){
-          const failing = targets.find((t)=>t.ok === false);
           $(`#${sec.id}-list`).empty();
           $(`#${sec.id}-meta`).text('');
           $(`#${sec.id}-empty`).text(failing
@@ -91,7 +91,8 @@
 
         const total = sum(rows);
         const max = Math.max(...rows.map((r)=>r.bytes || 0), 1);
-        $(`#${sec.id}-empty`).empty();
+        // rows outlive a failed scan, so say so — otherwise the last good numbers read as current
+        $(`#${sec.id}-empty`).text(failing ? `Last scan failed: ${failing.error} — showing the last successful scan.` : '');
         $(`#${sec.id}-list`).html(rows.map((r)=>{
           const share = `${(total ? r.bytes / total * 100 : 0).toFixed(1)}%`;
           if(r.kind === 'container') return container(r, max, share);
